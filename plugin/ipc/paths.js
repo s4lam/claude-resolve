@@ -18,7 +18,7 @@ const RESOLVE_DATA = path.join(APP_SUPPORT, 'Blackmagic Design', 'DaVinci Resolv
 // Rendered .mov output directory
 const RENDER_DIR = path.join(RESOLVE_DATA, 'Claude Resolve', 'renders');
 
-// Thumbnail directory (one PNG per render, written by render.py)
+// Thumbnail directory (one PNG per render, written by render.js)
 const THUMBNAIL_DIR = path.join(RENDER_DIR, 'thumbnails');
 
 // Plugin config directory
@@ -83,30 +83,6 @@ function buildEnv() {
 }
 const ENV = buildEnv();
 
-// Python executable candidates
-const PYTHON_CANDIDATES = isMac
-    ? [
-        '/opt/homebrew/bin/python3',
-        '/usr/local/bin/python3',
-        '/usr/bin/python3',
-        'python3'
-    ]
-    : [
-        path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps', 'python.exe'),
-        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python314', 'python.exe'),
-        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python313', 'python.exe'),
-        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python312', 'python.exe'),
-        'python'
-    ];
-
-// macOS: probe via a login+interactive shell so the lookup sees the
-// user's real PATH (/usr/local/bin, /opt/homebrew/bin) and resolves the
-// python3 that actually has Playwright — not the bare /usr/bin/python3
-// that a stripped-PATH /bin/sh probe would find first.
-const PYTHON_VERIFY_CMD = isMac
-    ? "zsh -lic 'command -v python3' 2>/dev/null"
-    : 'python -c "import sys; print(sys.executable)"';
-
 // FFmpeg executable candidates
 const FFMPEG_CANDIDATES = isMac
     ? [
@@ -130,8 +106,6 @@ module.exports = {
     RENDER_DIR,
     THUMBNAIL_DIR,
     CONFIG_DIR,
-    PYTHON_CANDIDATES,
-    PYTHON_VERIFY_CMD,
     FFMPEG_CANDIDATES,
     FFMPEG_VERIFY_CMD
 };

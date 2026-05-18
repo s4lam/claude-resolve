@@ -9,15 +9,13 @@ const { readConfig } = require('./config');
 const {
     findExecutable, ENV,
     RENDER_DIR, THUMBNAIL_DIR,
-    PYTHON_CANDIDATES, PYTHON_VERIFY_CMD,
     FFMPEG_CANDIDATES, FFMPEG_VERIFY_CMD
 } = require('./paths');
 
 // Resolve executable paths at load time — Resolve's Electron has a stripped PATH
-const PYTHON_PATH = findExecutable(PYTHON_CANDIDATES, PYTHON_VERIFY_CMD);
 const FFMPEG_PATH = findExecutable(FFMPEG_CANDIDATES, FFMPEG_VERIFY_CMD);
 
-console.log('RESOLVED: python=' + PYTHON_PATH, 'ffmpeg=' + FFMPEG_PATH);
+console.log('RESOLVED: ffmpeg=' + FFMPEG_PATH);
 
 function renderFilename(name) {
     const safe = (name || 'Overlay').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -118,9 +116,9 @@ async function handleRenderMov(_event, { html, name, fps, width, height }) {
     const movPath = path.join(RENDER_DIR, renderFilename(name));
     fs.writeFileSync(htmlPath, html);
 
-    const renderScript = path.join(__dirname, '..', 'renderer', 'render.py');
+    const renderScript = path.join(__dirname, '..', 'renderer', 'render.js');
 
-    console.log('RENDER: python=' + PYTHON_PATH, 'script=' + renderScript, 'html=' + htmlPath, 'out=' + movPath);
+    console.log('RENDER: script=' + renderScript, 'html=' + htmlPath, 'out=' + movPath);
 
     const cleanupTempDir = () => {
         try { fs.rmSync(tempDir, { recursive: true, force: true }); }
@@ -128,14 +126,16 @@ async function handleRenderMov(_event, { html, name, fps, width, height }) {
     };
 
     return new Promise((resolve) => {
-        const proc = spawn(PYTHON_PATH, [
+        // Run render.js with the bundled Electron acting as plain Node
+        // (ELECTRON_RUN_AS_NODE) — no dependency on a system `node` or PATH.
+        const proc = spawn(process.execPath, [
             renderScript, htmlPath,
             '--fps', String(fps),
             '--width', String(width),
             '--height', String(height),
             '--output', movPath,
             '--ffmpeg', FFMPEG_PATH
-        ], { env: ENV });
+        ], { env: { ...ENV, ELECTRON_RUN_AS_NODE: '1' } });
 
         let buf = '';
         let stderrBuf = '';

@@ -17,7 +17,6 @@ Claude Resolve is a Workflow Integration Plugin that brings AI-powered motion gr
 - **DaVinci Resolve Studio 21+** (not the free version — Workflow Integration Plugins require Studio)
 - **Node.js 18+** — required by the Claude Code CLI
 - **Claude Code CLI** with an active Pro or Max subscription
-- **Python 3.10+** with Playwright installed
 - **ffmpeg** in PATH
 - **Windows** or **macOS**
 
@@ -41,15 +40,10 @@ On macOS, if it's older than 18, upgrade with `brew install node` (latest) or `f
    claude login
    ```
 
-3. Install Python dependencies:
-   ```
-   pip install playwright
-   playwright install chromium
-   ```
+3. Make sure ffmpeg is in your PATH.
 
-4. Make sure ffmpeg is in your PATH.
-
-5. Clone the repo and run the install script:
+4. Clone the repo and run the install script. The script installs the
+   renderer's dependencies (Playwright + Chromium) for you:
 
    **Windows** (run as Administrator):
    ```
@@ -65,7 +59,7 @@ On macOS, if it's older than 18, upgrade with `brew install node` (latest) or `f
    sudo bash install.sh
    ```
 
-6. Restart DaVinci Resolve. Open the plugin from **Workspace > Workflow Integration > Claude Resolve**.
+5. Restart DaVinci Resolve. Open the plugin from **Workspace > Workflow Integration > Claude Resolve**.
 
 ## Usage
 
