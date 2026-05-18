@@ -132,12 +132,66 @@ ok 'Resolve found. (Workflow Integration Plugins require the Studio edition.)'
 
 # 2 - Node.js 18+
 step 2 'Checking Node.js'
-if ! command -v node >/dev/null 2>&1; then
-    fail 'Node.js not found. Install Node.js 18+:  brew install node'
-fi
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-if [ "${NODE_MAJOR:-0}" -lt 18 ]; then
-    fail "Node.js 18+ required, found $(node --version). Upgrade:  brew install node"
+
+node_major() {
+    command -v node >/dev/null 2>&1 || { echo 0; return; }
+    node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0
+}
+
+NODE_LTS_FALLBACK='v20.18.0'
+
+# Newest LTS version (e.g. v22.11.0) from nodejs.org, or empty on failure.
+# index.tab is sorted newest-first; column 10 is the LTS codename ("-" if not).
+latest_node_lts() {
+    curl -fsSL 'https://nodejs.org/dist/index.tab' 2>/dev/null \
+        | awk -F'\t' 'NR>1 && $10 != "-" { print $1; exit }'
+}
+
+install_node() {
+    # Official Node.js LTS .pkg from nodejs.org. The .pkg is a universal
+    # binary, but detect the arch so the log reflects the host.
+    local arch ver pkg url tmp
+    case "$(uname -m)" in
+        arm64) arch='arm64' ;;
+        *)     arch='x64'   ;;
+    esac
+    ver="$(latest_node_lts)"
+    if [ -z "$ver" ]; then
+        warn "Could not look up the latest LTS - using $NODE_LTS_FALLBACK."
+        ver="$NODE_LTS_FALLBACK"
+    fi
+    pkg="node-$ver.pkg"
+    url="https://nodejs.org/dist/$ver/$pkg"
+    tmp="$(mktemp -d)/$pkg"
+
+    warn "Downloading Node.js LTS $ver (universal, host $arch) from nodejs.org..."
+    if ! curl -fsSL "$url" -o "$tmp"; then
+        rm -f "$tmp"
+        warn 'Download failed.'
+        return 1
+    fi
+    warn 'Running the Node.js installer (administrator password may be requested)...'
+    if ! sudo installer -pkg "$tmp" -target /; then
+        rm -f "$tmp"
+        warn 'pkg install failed.'
+        return 1
+    fi
+    rm -f "$tmp"
+    # The .pkg installs into /usr/local/bin; make sure this session sees it.
+    case ":$PATH:" in *":/usr/local/bin:"*) ;; *) PATH="/usr/local/bin:$PATH" ;; esac
+    hash -r 2>/dev/null || true
+    [ "$(node_major)" -ge 18 ]
+}
+
+if [ "$(node_major)" -lt 18 ]; then
+    if command -v node >/dev/null 2>&1; then
+        warn "Node.js 18+ required, found $(node --version) - upgrading automatically..."
+    else
+        warn 'Node.js not found - installing automatically...'
+    fi
+    if ! install_node; then
+        fail 'Could not install Node.js automatically. Install Node.js 18+ from https://nodejs.org and re-run the installer.'
+    fi
 fi
 ok "Node.js $(node --version)"
 

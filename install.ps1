@@ -175,14 +175,102 @@ Ok 'Resolve found. (Workflow Integration Plugins require the Studio edition.)'
 
 # 2 - Node.js 18+
 Step 2 'Checking Node.js'
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    Fail 'Node.js not found. Install Node.js 18 or newer from https://nodejs.org'
+
+# Pull PATH (and the nodejs dir) back into this session after an installer
+# writes them to the registry but not to our already-running environment.
+function Sync-Path {
+    $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $user    = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $env:Path = (@($machine, $user) | Where-Object { $_ }) -join ';'
+    $nodeDir = Join-Path $env:ProgramFiles 'nodejs'
+    if ((Test-Path $nodeDir) -and ($env:Path -notlike "*$nodeDir*")) {
+        $env:Path = "$nodeDir;$env:Path"
+    }
+}
+
+function Get-NodeMajor {
+    $cmd = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $cmd) { return 0 }
+    try {
+        $v = (& node --version).Trim()
+        return [int](($v.TrimStart('v')).Split('.')[0])
+    } catch { return 0 }
+}
+
+# Newest LTS version string (e.g. 'v22.11.0') from nodejs.org, or $null.
+# index.json is sorted newest-first, so the first LTS entry is the latest.
+$NodeLtsFallback = 'v20.18.0'
+function Get-LatestNodeLts {
+    try {
+        $oldPref = $ProgressPreference
+        $ProgressPreference = 'SilentlyContinue'
+        $index = Invoke-RestMethod -Uri 'https://nodejs.org/dist/index.json' -UseBasicParsing
+        $ProgressPreference = $oldPref
+        $lts = $index | Where-Object { $_.lts } | Select-Object -First 1
+        if ($lts -and $lts.version) { return $lts.version }
+    } catch { $ProgressPreference = 'Continue' }
+    return $null
+}
+
+function Install-Node {
+    # Strategy 1 - winget (present on Windows 10 21H2+ / Windows 11).
+    # The OpenJS.NodeJS.LTS package already tracks the current LTS.
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Warn 'Installing Node.js via winget...'
+        & winget install --id OpenJS.NodeJS.LTS --silent `
+            --accept-source-agreements --accept-package-agreements
+        Sync-Path
+        if ((Get-NodeMajor) -ge 18) { return $true }
+        Warn 'winget install did not produce a usable Node.js - trying the official MSI.'
+    } else {
+        Warn 'winget not available - downloading the official Node.js MSI.'
+    }
+
+    # Strategy 2 - official Node.js MSI from nodejs.org.
+    $arch = if ([Environment]::Is64BitOperatingSystem) {
+        if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
+    } else { 'x86' }
+    $nodeVersion = Get-LatestNodeLts
+    if (-not $nodeVersion) {
+        Warn "Could not look up the latest LTS - using $NodeLtsFallback."
+        $nodeVersion = $NodeLtsFallback
+    }
+    $msiUrl = "https://nodejs.org/dist/$nodeVersion/node-$nodeVersion-$arch.msi"
+    $msiPath = Join-Path $env:TEMP 'node-lts-installer.msi'
+    try {
+        Warn "Downloading Node.js LTS $nodeVersion ($arch) from nodejs.org..."
+        $oldPref = $ProgressPreference
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $msiUrl -OutFile $msiPath -UseBasicParsing
+        $ProgressPreference = $oldPref
+        Warn 'Running the Node.js installer...'
+        $p = Start-Process msiexec.exe -ArgumentList @(
+            '/i', "`"$msiPath`"", '/qn', '/norestart'
+        ) -Wait -PassThru
+        Remove-Item $msiPath -Force -ErrorAction SilentlyContinue
+        Sync-Path
+        return ((Get-NodeMajor) -ge 18) -and ($p.ExitCode -eq 0)
+    } catch {
+        $ProgressPreference = 'Continue'
+        Remove-Item $msiPath -Force -ErrorAction SilentlyContinue
+        Warn "MSI install failed: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+$nodeMajor = Get-NodeMajor
+if ($nodeMajor -lt 18) {
+    if ($nodeMajor -eq 0) {
+        Warn 'Node.js not found - installing automatically...'
+    } else {
+        Warn "Node.js 18+ required, found v$nodeMajor - upgrading automatically..."
+    }
+    if (-not (Install-Node)) {
+        Fail 'Could not install Node.js automatically. Install Node.js 18+ from https://nodejs.org and re-run the installer.'
+    }
+    $nodeMajor = Get-NodeMajor
 }
 $nodeVer = (& node --version).Trim()
-$nodeMajor = [int](($nodeVer.TrimStart('v')).Split('.')[0])
-if ($nodeMajor -lt 18) {
-    Fail "Node.js 18+ required, found $nodeVer. Upgrade from https://nodejs.org"
-}
 Ok "Node.js $nodeVer"
 
 # 3 - Claude Code CLI
