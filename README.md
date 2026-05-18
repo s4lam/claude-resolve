@@ -7,9 +7,9 @@ Claude Resolve is a Workflow Integration Plugin that brings AI-powered motion gr
 
 ![Welcome Screen](screenshots/welcome_screen.png)
 
-![Generated Animation Preview](screenshots/ready%20to%20render.png)
+![Generated Animation Preview](screenshots/ready-to-render.png)
 
-![Rendered and Added to Timeline](screenshots/aded%20to%20timeline.png)
+![Rendered and Added to Timeline](screenshots/added-to-timeline.png)
 
 ## Requirements
 
