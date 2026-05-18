@@ -5,13 +5,17 @@
  *   - window.React, window.ReactDOM (React 18 UMD)
  *   - window.Motion             (Framer Motion v10 UMD; exposes motion, AnimatePresence, etc.)
  *   - @font-face for "Bricolage Grotesque", "Fraunces", "JetBrains Mono"
+ *   - deterministic clock hijack: performance.now / Date.now /
+ *     requestAnimationFrame / Element.prototype.animate (WAAPI)
  *
  * Modes (auto-detected per HTML):
  *   - frame:            HTML implements window.renderFrame(frame, fps); renderer
  *                       calls it for each frame then screenshots.
- *   - realtime-precise: HTML doesn't implement renderFrame; renderer hijacks
- *                       performance.now / Date.now / requestAnimationFrame and
- *                       steps time manually so Framer Motion springs / layout
+ *   - realtime-precise: HTML doesn't implement renderFrame. The clock hijack
+ *                       (installed before any HTML script) freezes time, so
+ *                       React/Framer Motion mount at t=0 with entrance
+ *                       animations queued; the renderer then steps time
+ *                       manually so springs, layout and WAAPI-accelerated
  *                       animations settle deterministically per frame.
  *
  * Required HTML API:
@@ -57,9 +61,61 @@ function pad6(n) {
     return String(n).padStart(6, '0');
 }
 
-// Concatenated UMD bundles + font injector. Runs in the page's main world
-// before any HTML script. UMDs assign window.React / window.ReactDOM /
-// window.Motion themselves; font injector polls for <head> then appends a
+// Deterministic clock + animation hijack. Installed via addInitScript so it
+// runs before ANY HTML <script> — React and Framer Motion mount on a clock
+// frozen at t=0, with their entrance animations queued, not played:
+//   - performance.now / Date.now -> return window.__renderTime while active
+//   - requestAnimationFrame      -> callbacks queued, fired only by __stepFrame
+//   - Element.prototype.animate  -> WAAPI animations paused on creation and
+//     driven by __stepFrame. FM v10 offloads opacity/transform to WAAPI, which
+//     the performance.now / rAF overrides alone cannot reach — without this an
+//     entrance animation plays in real wall-clock time during page load and is
+//     already settled before the first frame is stepped.
+const TIME_HIJACK = `
+(() => {
+    if (window.__renderHijack) return;
+    window.__renderHijack = true;
+    window.__renderTime = 0;
+    window.__renderActive = true;
+
+    const origPerfNow = performance.now.bind(performance);
+    performance.now = () => window.__renderActive ? window.__renderTime : origPerfNow();
+    const origDateNow = Date.now.bind(Date);
+    Date.now = () => window.__renderActive ? window.__renderTime : origDateNow();
+
+    const callbacks = [];
+    window.requestAnimationFrame = (cb) => { callbacks.push(cb); return callbacks.length; };
+
+    // WAAPI: pause every animation on creation, remember the render-time it
+    // was created at, then drive its currentTime from __stepFrame.
+    const waapiAnims = [];
+    const origAnimate = Element.prototype.animate;
+    Element.prototype.animate = function (keyframes, options) {
+        const anim = origAnimate.call(this, keyframes, options);
+        if (window.__renderActive) {
+            try { anim.pause(); } catch (_) {}
+            waapiAnims.push({ anim: anim, startTime: window.__renderTime });
+        }
+        return anim;
+    };
+
+    window.__stepFrame = (timeMs) => {
+        window.__renderTime = timeMs;
+        const cbs = callbacks.splice(0);
+        cbs.forEach((cb) => { try { cb(timeMs); } catch (_) {} });
+        for (const rec of waapiAnims) {
+            try {
+                const local = timeMs - rec.startTime;
+                rec.anim.currentTime = local < 0 ? 0 : local;
+            } catch (_) {}
+        }
+    };
+})();
+`;
+
+// Time hijack + concatenated UMD bundles + font injector. Runs in the page's
+// main world before any HTML script. UMDs assign window.React / window.ReactDOM
+// / window.Motion themselves; font injector polls for <head> then appends a
 // <style> with @font-face rules using file:// URLs.
 function buildInitScript() {
     const umdBlobs = [];
@@ -96,7 +152,7 @@ function buildInitScript() {
         'inject();' +
         '})();';
 
-    return umdBlobs.join('\n') + '\n' + fontInjector;
+    return TIME_HIJACK + '\n' + umdBlobs.join('\n') + '\n' + fontInjector;
 }
 
 async function detectMode(page) {
@@ -116,31 +172,13 @@ async function renderFrameMode(page, args, framesDir, totalFrames) {
     }
 }
 
-// Hijack time / rAF, step the browser clock manually per frame.
-//
-// The init script's UMDs (React, ReactDOM, Motion) are already in place
-// before HTML runs, so by the time we hit this function the React tree has
-// mounted with our overridden clock starting at t=0.
+// Step the browser clock manually per frame. The clock + animation hijack
+// (performance.now / Date.now / rAF / WAAPI) is installed via addInitScript,
+// so React and Framer Motion already mounted with the clock frozen at t=0 and
+// their entrance animations queued — not yet played.
 async function renderRealtimePreciseMode(page, args, framesDir, totalFrames) {
-    await page.evaluate(`
-    (() => {
-        window.__renderTime = 0;
-        window.__renderActive = true;
-        const origPerfNow = performance.now.bind(performance);
-        performance.now = () => window.__renderActive ? window.__renderTime : origPerfNow();
-        const origDateNow = Date.now.bind(Date);
-        Date.now = () => window.__renderActive ? window.__renderTime : origDateNow();
-        const callbacks = [];
-        window.requestAnimationFrame = (cb) => { callbacks.push(cb); return callbacks.length; };
-        window.__stepFrame = (timeMs) => {
-            window.__renderTime = timeMs;
-            const cbs = callbacks.splice(0);
-            cbs.forEach(cb => { try { cb(timeMs); } catch(_) {} });
-        };
-    })();
-    `);
-
-    // Give React a beat to mount with t=0
+    // Let React finish mounting and Framer Motion register its animations,
+    // all at the frozen t=0, before we start stepping the clock.
     await page.waitForTimeout(500);
     await page.evaluate('window.__stepFrame(0)');
 
