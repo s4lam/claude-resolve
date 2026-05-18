@@ -5,35 +5,176 @@
   elevated PowerShell prompt.
 #>
 
+# ---------------------------------------------------------------- console
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
+
+# Enable ANSI/VT processing so 24-bit colour works on Windows PowerShell 5.1.
+$Ansi = $false
+try {
+    $vt = Add-Type -Name CRVT -Namespace CRInstaller -PassThru -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll")] public static extern System.IntPtr GetStdHandle(int h);
+[System.Runtime.InteropServices.DllImport("kernel32.dll")] public static extern bool GetConsoleMode(System.IntPtr h, out int m);
+[System.Runtime.InteropServices.DllImport("kernel32.dll")] public static extern bool SetConsoleMode(System.IntPtr h, int m);
+'@
+    $hOut = $vt::GetStdHandle(-11)
+    $mode = 0
+    if ($vt::GetConsoleMode($hOut, [ref]$mode)) {
+        if ($vt::SetConsoleMode($hOut, ($mode -bor 0x0004))) { $Ansi = $true }
+    }
+} catch { $Ansi = $false }
+
+$ESC       = [char]27
+$ICON_OK   = [char]0x2713   # check
+$ICON_WARN = [char]0x26A0   # warning sign
+$ICON_ERR  = [char]0x2717   # ballot x
+$BTL = [char]0x256D; $BTR = [char]0x256E      # rounded box corners
+$BBL = [char]0x2570; $BBR = [char]0x256F
+$BH  = [char]0x2500; $BV  = [char]0x2502
+
+# Brand gradient: warm orange -> amber -> green -> teal (from design-tokens).
+$Stops = @( @(232,132,58), @(212,164,76), @(128,196,153), @(76,201,176) )
+
+function GradientAt([double]$t) {
+    if ($t -lt 0) { $t = 0 } elseif ($t -gt 1) { $t = 1 }
+    $seg = $t * ($Stops.Count - 1)
+    $i = [int][Math]::Floor($seg)
+    if ($i -gt $Stops.Count - 2) { $i = $Stops.Count - 2 }
+    $f = $seg - $i
+    $a = $Stops[$i]; $b = $Stops[$i + 1]
+    return @(
+        [int]($a[0] + ($b[0] - $a[0]) * $f),
+        [int]($a[1] + ($b[1] - $a[1]) * $f),
+        [int]($a[2] + ($b[2] - $a[2]) * $f)
+    )
+}
+function Tint([int[]]$c, [string]$s) {
+    if ($Ansi) { return "$ESC[38;2;$($c[0]);$($c[1]);$($c[2])m$s$ESC[0m" }
+    return $s
+}
+
+# ---------------------------------------------------------------- UI parts
+$BAR_WIDTH = 48
+
+function Show-Bar {
+    if ($Ansi) {
+        $s = '  '
+        for ($i = 0; $i -lt $BAR_WIDTH; $i++) {
+            $c = GradientAt ($i / [double]($BAR_WIDTH - 1))
+            $s += "$ESC[48;2;$($c[0]);$($c[1]);$($c[2])m "
+        }
+        Write-Host ($s + "$ESC[0m")
+    } else {
+        Write-Host '  ' -NoNewline
+        foreach ($col in @('DarkYellow','Yellow','DarkGreen','Green','Cyan','DarkCyan')) {
+            Write-Host '        ' -BackgroundColor $col -NoNewline
+        }
+        Write-Host ''
+    }
+}
+
+function Show-Header {
+    Write-Host ''
+    Write-Host '      \  |  /' -ForegroundColor DarkYellow
+    Write-Host '   ---' -ForegroundColor DarkYellow -NoNewline
+    Write-Host ' ( * ) ' -ForegroundColor Yellow -NoNewline
+    Write-Host '---' -ForegroundColor DarkYellow -NoNewline
+    Write-Host '    Claude Resolve' -ForegroundColor White
+    Write-Host '      /  |  \' -ForegroundColor DarkYellow -NoNewline
+    Write-Host '       AI motion graphics for DaVinci Resolve' -ForegroundColor DarkGray
+    Write-Host ''
+    Show-Bar
+    Write-Host ''
+}
+
+function Step([int]$n, [string]$msg) {
+    Write-Host ''
+    $tag = "[$n/9]"
+    if ($Ansi) {
+        Write-Host (Tint (GradientAt ([double]($n - 1) / 8)) $tag) -NoNewline
+    } else {
+        Write-Host $tag -ForegroundColor Cyan -NoNewline
+    }
+    Write-Host "  $msg" -ForegroundColor White
+}
+function Ok([string]$msg) {
+    Write-Host '       ' -NoNewline
+    Write-Host $ICON_OK -ForegroundColor Green -NoNewline
+    Write-Host "  $msg" -ForegroundColor Gray
+}
+function Warn([string]$msg) {
+    Write-Host '       ' -NoNewline
+    Write-Host $ICON_WARN -ForegroundColor Yellow -NoNewline
+    Write-Host "  $msg" -ForegroundColor Gray
+}
+function Fail([string]$msg) {
+    Write-Host ''
+    Write-Host '       ' -NoNewline
+    Write-Host $ICON_ERR -ForegroundColor Red -NoNewline
+    Write-Host "  $msg" -ForegroundColor Red
+    Write-Host ''
+    Read-Host '       Press Enter to exit'
+    exit 1
+}
+
+function Show-Success {
+    $inner = 46
+    $top = "  $BTL" + ($BH.ToString() * $inner) + $BTR
+    $bot = "  $BBL" + ($BH.ToString() * $inner) + $BBR
+    $text = "Claude Resolve installed successfully"
+    $pad = $inner - ($text.Length + 6)        # 6 = "  OK  " spacing
+    $teal = GradientAt 1.0
+
+    Write-Host ''
+    Write-Host (Tint $teal $top)
+    Write-Host (Tint $teal "  $BV") -NoNewline
+    Write-Host '   ' -NoNewline
+    Write-Host $ICON_OK -ForegroundColor Green -NoNewline
+    Write-Host "  $text" -ForegroundColor White -NoNewline
+    Write-Host (' ' * $pad) -NoNewline
+    Write-Host (Tint $teal "$BV")
+    Write-Host (Tint $teal $bot)
+    Write-Host ''
+    Write-Host '       Restart DaVinci Resolve, then open it from:' -ForegroundColor Gray
+    Write-Host '       Workspace > Workflow Integration > Claude Resolve' -ForegroundColor White
+    Write-Host ''
+}
+
+# ---------------------------------------------------------------- paths
 $RepoRoot    = $PSScriptRoot
 $PluginSrc   = Join-Path $RepoRoot 'plugin'
 $RendererSrc = Join-Path $PluginSrc 'renderer'
 $Dest        = Join-Path $env:ProgramData 'Blackmagic Design\DaVinci Resolve\Support\Workflow Integration Plugins\com.clauderesolve.plugin'
 
-function Step([int]$n, [string]$msg) { Write-Host "`n[$n/9] $msg" -ForegroundColor Cyan }
-function Ok([string]$msg)            { Write-Host "  OK   $msg" -ForegroundColor Green }
-function Warn([string]$msg)          { Write-Host "  !    $msg" -ForegroundColor Yellow }
-function Fail([string]$msg) {
-    Write-Host "  X    $msg" -ForegroundColor Red
-    Read-Host "`nInstallation failed. Press Enter to exit"
-    exit 1
-}
-
-Write-Host "`nClaude Resolve installer" -ForegroundColor White
+Show-Header
 
 # 1 - DaVinci Resolve
-Step 1 'Checking DaVinci Resolve...'
+Step 1 'Checking DaVinci Resolve'
 $resolveExe = Join-Path $env:ProgramFiles 'Blackmagic Design\DaVinci Resolve\Resolve.exe'
 if (-not (Test-Path $resolveExe)) {
     Fail 'DaVinci Resolve not found. Install DaVinci Resolve Studio 21+ first.'
 }
 if (Get-Process -Name 'Resolve' -ErrorAction SilentlyContinue) {
-    Fail 'DaVinci Resolve is running. Quit it completely, then re-run this installer.'
+    Warn 'DaVinci Resolve is running. Save your work first.'
+    $answer = Read-Host '       Close Resolve and continue? (y/n)'
+    if ($answer -match '^(y|yes)$') {
+        $proc = Get-Process -Name 'Resolve' -ErrorAction SilentlyContinue
+        if ($proc) {
+            $proc.CloseMainWindow() | Out-Null
+            for ($i = 0; $i -lt 10; $i++) {
+                Start-Sleep -Milliseconds 800
+                if (-not (Get-Process -Name 'Resolve' -ErrorAction SilentlyContinue)) { break }
+            }
+            Get-Process -Name 'Resolve' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        }
+        Ok 'Resolve closed.'
+    } else {
+        Fail 'Cancelled. Quit DaVinci Resolve, then re-run the installer.'
+    }
 }
 Ok 'Resolve found. (Workflow Integration Plugins require the Studio edition.)'
 
 # 2 - Node.js 18+
-Step 2 'Checking Node.js...'
+Step 2 'Checking Node.js'
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Fail 'Node.js not found. Install Node.js 18 or newer from https://nodejs.org'
 }
@@ -45,7 +186,7 @@ if ($nodeMajor -lt 18) {
 Ok "Node.js $nodeVer"
 
 # 3 - Claude Code CLI
-Step 3 'Checking Claude Code CLI...'
+Step 3 'Checking Claude Code CLI'
 $haveClaude = [bool](Get-Command claude -ErrorAction SilentlyContinue)
 if (-not $haveClaude -and (Test-Path (Join-Path $env:APPDATA 'npm\claude.cmd'))) {
     $haveClaude = $true
@@ -62,8 +203,6 @@ if (-not $haveClaude) {
 } else {
     Ok 'Claude Code CLI present.'
 }
-
-# Login status - best effort, never aborts.
 if (Test-Path (Join-Path $env:USERPROFILE '.claude\.credentials.json')) {
     Ok 'Claude Code is logged in.'
 } else {
@@ -71,7 +210,7 @@ if (Test-Path (Join-Path $env:USERPROFILE '.claude\.credentials.json')) {
 }
 
 # 4 - Renderer dependencies
-Step 4 'Installing renderer dependencies (Playwright)...'
+Step 4 'Installing renderer dependencies (Playwright)'
 Push-Location $RendererSrc
 & npm install --no-audit --no-fund
 $exit = $LASTEXITCODE
@@ -80,7 +219,7 @@ if ($exit -ne 0) { Fail 'npm install failed in plugin\renderer.' }
 Ok 'Renderer dependencies installed.'
 
 # 5 - Chromium
-Step 5 'Downloading Playwright Chromium...'
+Step 5 'Downloading Playwright Chromium'
 Push-Location $RendererSrc
 & npx --yes playwright install chromium
 $exit = $LASTEXITCODE
@@ -89,15 +228,15 @@ if ($exit -ne 0) { Fail 'Playwright Chromium download failed.' }
 Ok 'Chromium installed.'
 
 # 6 - ffmpeg
-Step 6 'Checking ffmpeg...'
+Step 6 'Checking ffmpeg'
 if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
     Ok 'ffmpeg found.'
 } else {
-    Warn 'ffmpeg not found on PATH. Rendering will not work until ffmpeg is installed and on PATH.'
+    Warn 'ffmpeg not found on PATH. Rendering needs ffmpeg installed and on PATH.'
 }
 
 # 7 - Copy plugin into DaVinci Resolve
-Step 7 'Installing plugin into DaVinci Resolve...'
+Step 7 'Installing plugin into DaVinci Resolve'
 try {
     if (Test-Path $Dest) { Remove-Item -LiteralPath $Dest -Recurse -Force -ErrorAction Stop }
     New-Item -ItemType Directory -Path $Dest -Force -ErrorAction Stop | Out-Null
@@ -108,7 +247,7 @@ try {
 Ok "Installed to $Dest"
 
 # 8 - Verify
-Step 8 'Verifying installation...'
+Step 8 'Verifying installation'
 $required = @(
     'manifest.xml',
     'main.js',
@@ -124,9 +263,6 @@ foreach ($rel in $required) {
 Ok 'All required files present.'
 
 # 9 - Done
-Step 9 'Done.'
-Write-Host ''
-Write-Host 'Claude Resolve is installed.' -ForegroundColor Green
-Write-Host 'Restart DaVinci Resolve, then open it from:'
-Write-Host '  Workspace > Workflow Integration > Claude Resolve' -ForegroundColor White
-Read-Host "`nPress Enter to exit"
+Step 9 'Done'
+Show-Success
+Read-Host '       Press Enter to exit'

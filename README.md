@@ -1,16 +1,15 @@
-# Claude Resolve (v0.4.3-beta)
+# Claude Resolve (v0.5.0-beta)
 
 **AI Motion Graphics Generator for DaVinci Resolve Studio**
 *by Oleg Kupshukov*
 
 Claude Resolve is a Workflow Integration Plugin that brings AI-powered motion graphics generation directly into DaVinci Resolve Studio. Describe what you want in plain text, and Claude generates the animation code, renders it to ProRes 4444 with alpha transparency, and imports it to your timeline.
 
-<!-- TODO: replace screenshots below with new ones after the UI redesign (current images show the old UI) -->
 ![Welcome Screen](screenshots/welcome_screen.png)
 
 ![Generated Animation Preview](screenshots/ready%20to%20render.png)
 
-![Rendered and Added to Timeline](screenshots/timelinescreenshot_after_render.png)
+![Rendered and Added to Timeline](screenshots/aded%20to%20timeline.png)
 
 ## Requirements
 
