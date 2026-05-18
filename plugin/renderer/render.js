@@ -306,7 +306,14 @@ async function main() {
     }
 }
 
-main().catch((err) => {
-    emit({ type: 'error', message: err && err.message ? err.message : String(err) });
-    process.exit(1);
-});
+main()
+    .then(() => {
+        // Exit explicitly — Playwright/Electron-as-Node can leave the event
+        // loop alive after browser.close(), so a natural return would hang
+        // the parent process (which waits on the 'close' event).
+        process.exit(0);
+    })
+    .catch((err) => {
+        emit({ type: 'error', message: err && err.message ? err.message : String(err) });
+        process.exit(1);
+    });
