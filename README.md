@@ -5,11 +5,9 @@
 
 Claude Resolve is a Workflow Integration Plugin that brings AI-powered motion graphics generation directly into DaVinci Resolve Studio. Describe what you want in plain text, and Claude generates the animation code, renders it to ProRes 4444 with alpha transparency, and imports it to your timeline.
 
-![Welcome Screen](screenshots/welcome_screen.png)
+<img src="screenshots/welcome_screen.png" alt="Welcome screen" width="600">
 
-![Generated Animation Preview](screenshots/ready-to-render.png)
-
-![Rendered and Added to Timeline](screenshots/added-to-timeline.png)
+<img src="screenshots/ready-to-render.png" alt="Render card with result" width="600">
 
 ## Requirements
 
