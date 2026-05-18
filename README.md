@@ -30,36 +30,17 @@ On macOS, if it's older than 18, upgrade with `brew install node` (latest) or `f
 
 ## Installation
 
-1. Install Claude Code CLI:
-   ```
-   npm install -g @anthropic-ai/claude-code
-   ```
+### Windows
+1. Download or clone the repo
+2. Double-click `install.bat`
+3. Restart DaVinci Resolve
 
-2. Log in to Claude Code:
-   ```
-   claude login
-   ```
+### macOS
+1. Download or clone the repo
+2. Double-click `install.command`
+3. Restart DaVinci Resolve
 
-3. Make sure ffmpeg is in your PATH.
-
-4. Clone the repo and run the install script. The script installs the
-   renderer's dependencies (Playwright + Chromium) for you:
-
-   **Windows** (run as Administrator):
-   ```
-   git clone https://github.com/olegkupshukov/claude-resolve.git
-   cd claude-resolve
-   install.bat
-   ```
-
-   **macOS**:
-   ```
-   git clone https://github.com/olegkupshukov/claude-resolve.git
-   cd claude-resolve
-   sudo bash install.sh
-   ```
-
-5. Restart DaVinci Resolve. Open the plugin from **Workspace > Workflow Integration > Claude Resolve**.
+The installer checks for DaVinci Resolve and Node.js, installs the Claude Code CLI and the renderer's dependencies (Playwright + Chromium), and copies the plugin into Resolve. After installing, open the plugin from **Workspace > Workflow Integration > Claude Resolve**.
 
 ## Usage
 

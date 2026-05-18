@@ -1,27 +1,11 @@
 @echo off
-set DEST=C:\ProgramData\Blackmagic Design\DaVinci Resolve\Support\Workflow Integration Plugins\com.clauderesolve.plugin
+REM Claude Resolve installer launcher.
+REM Elevates to administrator, then hands off to install.ps1.
 
-echo Installing renderer dependencies...
-pushd "%~dp0plugin\renderer"
-call npm install --no-audit --no-fund
-if errorlevel 1 (
-    echo Error: npm install failed.
-    popd
-    pause
-    exit /b 1
+net session >nul 2>&1
+if %errorlevel% equ 0 (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1"
+) else (
+    echo Requesting administrator privileges...
+    powershell -NoProfile -Command "Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"%~dp0install.ps1\"'"
 )
-call npx --yes playwright install chromium
-if errorlevel 1 (
-    echo Error: Playwright Chromium download failed.
-    popd
-    pause
-    exit /b 1
-)
-popd
-
-echo Installing Claude Resolve...
-xcopy /E /I /Y "%~dp0plugin" "%DEST%"
-echo.
-echo Done. Restart DaVinci Resolve to use the plugin.
-echo Open it from Workspace ^> Workflow Integration ^> Claude Resolve
-pause
