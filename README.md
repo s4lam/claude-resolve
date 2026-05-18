@@ -1,10 +1,11 @@
-# Claude Resolve (Beta)
+# Claude Resolve (v0.4.2-beta)
 
 **AI Motion Graphics Generator for DaVinci Resolve Studio**
 *by Oleg Kupshukov*
 
 Claude Resolve is a Workflow Integration Plugin that brings AI-powered motion graphics generation directly into DaVinci Resolve Studio. Describe what you want in plain text, and Claude generates the animation code, renders it to ProRes 4444 with alpha transparency, and imports it to your timeline.
 
+<!-- TODO: replace screenshots below with new ones after the UI redesign (current images show the old UI) -->
 ![Welcome Screen](screenshots/welcome_screen.png)
 
 ![Generated Animation Preview](screenshots/ready%20to%20render.png)
@@ -14,10 +15,19 @@ Claude Resolve is a Workflow Integration Plugin that brings AI-powered motion gr
 ## Requirements
 
 - **DaVinci Resolve Studio 21+** (not the free version — Workflow Integration Plugins require Studio)
+- **Node.js 18+** — required by the Claude Code CLI
 - **Claude Code CLI** with an active Pro or Max subscription
 - **Python 3.10+** with Playwright installed
 - **ffmpeg** in PATH
 - **Windows** or **macOS**
+
+Check your Node.js version:
+
+```
+node --version    # must be v18 or newer
+```
+
+On macOS, if it's older than 18, upgrade with `brew install node` (latest) or `fnm install 22`.
 
 ## Installation
 
@@ -76,18 +86,29 @@ Open the sidebar (gear icon) to configure:
 
 - **Model**: Sonnet (fast) or Opus (smart)
 - **FPS**: 24, 25, 30, or 60
-- **Resolution**: 1920x1080 or 3840x2160
+- **Resolution**: 1920×1080, 3840×2160, 1080×1920, 1080×1350, or 1080×1080
 - **Assets**: Manage rendered .mov files (sync to Media Pool, delete)
+
+## Bundled Fonts
+
+The plugin ships with a curated set of fonts so generated animations look consistent across machines without extra installs:
+
+- **Bricolage Grotesque**
+- **Fraunces**
+- **JetBrains Mono**
 
 ## Known Limitations
 
 - Complex prompts may be slow on Sonnet — switch to Opus for better results on detailed animations
-- macOS support is new and not yet tested on a real Mac with Resolve — please report issues
 - The plugin spawns Claude Code CLI as a subprocess — first response may take a few seconds to warm up
+- This is a beta — expect rough edges; please report issues on GitHub or Discord
+
+Tested on Windows and macOS (Apple Silicon).
 
 ## Links
 
 - [GitHub](https://github.com/olegkupshukov/claude-resolve)
+- [Discord](https://discord.gg/95YrCyMgsK)
 - [Instagram](https://instagram.com/olegkupshukov)
 
 ## License
