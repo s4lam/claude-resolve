@@ -1,4 +1,4 @@
-# Claude Resolve (v0.4.2-beta)
+# Claude Resolve (v0.4.3-beta)
 
 **AI Motion Graphics Generator for DaVinci Resolve Studio**
 *by Oleg Kupshukov*
