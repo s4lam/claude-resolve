@@ -5,6 +5,7 @@
     "main": "main.js",
     "scripts": {
         "start": "electron .",
+        "test": "node tests/run-tests.js",
         "build": "vite build"
     },
     "devDependencies": {

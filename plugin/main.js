@@ -1,13 +1,19 @@
-// Claude Resolve — Main Process
+// Resolve AI — Main Process
 // Sandboxed Electron app loaded by DaVinci Resolve as a Workflow Integration Plugin.
 // IPC handlers are split into ipc/ modules.
 
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const { setupResolveHandlers } = require('./ipc/resolve');
-const { setupClaudeHandlers, cleanupClaude } = require('./ipc/claude');
+const { setupClaudeHandlers } = require('./ipc/claude');
+const { setupAgentHandlers, cleanupAgent } = require('./ipc/agent');
 const { setupOverlayHandlers } = require('./ipc/overlay');
 const { setupConfigHandlers } = require('./ipc/config');
+const { setupTemplateHandlers } = require('./ipc/templates');
+const { setupAssetHandlers } = require('./ipc/assets');
+const { setupTemplatePackHandlers } = require('./ipc/template-packs');
+const { setupCaptionHandlers } = require('./ipc/captions');
+const { setupShowcaseHandlers } = require('./ipc/showcase');
 const { setupUpdateHandlers } = require('./ipc/updates');
 const { setupPreviewHandlers } = require('./ipc/preview');
 
@@ -26,7 +32,7 @@ function createWindow() {
     });
 
     mainWindow.on('close', () => {
-        cleanupClaude();
+        cleanupAgent();
         app.quit();
     });
     mainWindow.loadFile('dist/index.html');
@@ -36,8 +42,14 @@ app.whenReady().then(async () => {
     createWindow();
     setupResolveHandlers(ipcMain);
     setupClaudeHandlers(ipcMain, mainWindow);
+    setupAgentHandlers(ipcMain, mainWindow);
     setupOverlayHandlers(ipcMain, mainWindow);
     setupConfigHandlers(ipcMain);
+    setupTemplateHandlers(ipcMain);
+    setupAssetHandlers(ipcMain);
+    setupTemplatePackHandlers(ipcMain);
+    setupCaptionHandlers(ipcMain);
+    setupShowcaseHandlers(ipcMain);
     setupUpdateHandlers(ipcMain);
     setupPreviewHandlers(ipcMain);
     ipcMain.handle('window:resize', (_event, { width, height }) => {

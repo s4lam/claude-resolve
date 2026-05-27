@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { Gear, Send, Stop } from './Icons';
 
-export default function ChatInput({ onSend, onStop, isProcessing, sidebarOpen, onToggleSidebar, updateAvailable }) {
+export default function ChatInput({ onSend, onStop, isProcessing, sidebarOpen, sidebarView, onToggleSidebar, updateAvailable }) {
     const inputRef = useRef(null);
 
     useEffect(() => {
@@ -24,13 +24,17 @@ export default function ChatInput({ onSend, onStop, isProcessing, sidebarOpen, o
         }
     }
 
+    const settingsOpen = sidebarOpen && sidebarView === 'settings';
+    const gearLabel = settingsOpen ? 'Close settings' : 'Open settings';
+
     return (
         <div className="composer">
             <button
-                className={'composer-gear' + (sidebarOpen ? ' on' : '')}
+                className={'composer-gear' + (settingsOpen ? ' on' : '')}
                 onClick={onToggleSidebar}
-                aria-label="Toggle settings and renders"
-                title="Settings & renders"
+                aria-label={gearLabel}
+                aria-pressed={settingsOpen}
+                title={gearLabel}
             >
                 <Gear />
                 {updateAvailable && <span className="gear-badge" />}
@@ -41,7 +45,7 @@ export default function ChatInput({ onSend, onStop, isProcessing, sidebarOpen, o
                     ref={inputRef}
                     type="text"
                     className="composer-input"
-                    placeholder="Ask Claude to animate…"
+                    placeholder="Ask Resolve AI to animate..."
                     autoFocus
                     disabled={isProcessing}
                     onKeyDown={handleKeyDown}

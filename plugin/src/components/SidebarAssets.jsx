@@ -2,11 +2,33 @@ import React, { useState, useEffect } from 'react';
 import { Sync, Folder } from './Icons';
 import { hashGradient } from '../utils/hashGradient';
 
-export default function SidebarAssets() {
+function rerenderPrompt(render) {
+    const metadata = render.metadata || {};
+    return [
+        'Re-render this saved Resolve AI result from history.',
+        '',
+        `Original request: ${metadata.prompt || render.name}`,
+        '',
+        metadata.html ? 'Previous generated HTML:' : '',
+        metadata.html ? '```html' : '',
+        metadata.html || '',
+        metadata.html ? '```' : '',
+        '',
+        'Return one complete replacement HTML file.'
+    ].filter(Boolean).join('\n');
+}
+
+export default function SidebarAssets({ onPrompt }) {
     const [renders, setRenders] = useState([]);
     const [syncStatus, setSyncStatus] = useState(null);
+    const [query, setQuery] = useState('');
 
-    useEffect(() => { refreshRenders(); }, []);
+    useEffect(() => {
+        refreshRenders();
+        const onChanged = () => refreshRenders();
+        window.addEventListener('resolve-ai:renders-changed', onChanged);
+        return () => window.removeEventListener('resolve-ai:renders-changed', onChanged);
+    }, []);
 
     async function refreshRenders() {
         setRenders(await window.overlayAPI.listRenders());
@@ -26,6 +48,23 @@ export default function SidebarAssets() {
         window.overlayAPI.revealRender(name);
     }
 
+    async function handleRename(render) {
+        const base = render.name.replace(/\.mov$/i, '');
+        const nextName = window.prompt('Render name', base);
+        if (!nextName || nextName === base) return;
+        const result = await window.overlayAPI.renameRender(render.name, nextName);
+        if (!result?.success) {
+            setSyncStatus(result?.error || 'Rename failed');
+            setTimeout(() => setSyncStatus(null), 3000);
+        }
+        refreshRenders();
+    }
+
+    function handleRerender(render) {
+        if (!onPrompt) return;
+        onPrompt(rerenderPrompt(render), { displayText: `Re-render: ${render.name}` });
+    }
+
     async function handleSync() {
         setSyncStatus('syncing');
         try {
@@ -37,10 +76,20 @@ export default function SidebarAssets() {
         setTimeout(() => setSyncStatus(null), 3000);
     }
 
+    const filteredRenders = renders.filter(render => {
+        const haystack = [
+            render.name,
+            render.metadata?.prompt,
+            render.metadata?.provider,
+            render.metadata?.model
+        ].filter(Boolean).join(' ').toLowerCase();
+        return haystack.includes(query.toLowerCase());
+    });
+
     return (
-        <div className="sb-section">
+        <div className="sb-section render-history-section">
             <div className="sb-title">
-                <span>Assets · Renders</span>
+                <span>Render History</span>
                 <span className="sb-actions">
                     {syncStatus
                         ? <span className="sync-status">{syncStatus}</span>
@@ -51,11 +100,18 @@ export default function SidebarAssets() {
                 </span>
             </div>
 
+            <input
+                className="sb-search"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search renders"
+            />
+
             {renders.length === 0 ? (
                 <div className="sb-empty">No renders yet</div>
             ) : (
                 <div className="render-list">
-                    {renders.map(r => (
+                    {filteredRenders.map(r => (
                         <div className="render" key={r.name}>
                             {r.thumbnail
                                 ? <img className="render-thumb" src={r.thumbnail} alt="" />
@@ -71,7 +127,14 @@ export default function SidebarAssets() {
                                         <Folder />
                                     </button>
                                 </div>
-                                <div className="render-sub">{(r.size / 1048576).toFixed(1)} MB</div>
+                                <div className="render-sub">
+                                    {(r.size / 1048576).toFixed(1)} MB
+                                    {r.metadata?.provider ? ` · ${r.metadata.provider}` : ''}
+                                </div>
+                                <div className="render-actions">
+                                    <button className="mini-action" onClick={() => handleRerender(r)}>Re-render</button>
+                                    <button className="mini-action" onClick={() => handleRename(r)}>Rename</button>
+                                </div>
                             </div>
                             <button
                                 className="render-del"
