@@ -29,6 +29,9 @@ export default function SidebarAssetLibrary({ config, onConfigChange, onPrompt }
     const selectedIds = useMemo(() => new Set(config.selectedAssetIds || []), [config.selectedAssetIds]);
     const selectedCount = assets.filter(asset => selectedIds.has(asset.id)).length;
     const pinnedCount = assets.filter(asset => asset.alwaysInclude).length;
+    const boardAssets = useMemo(() => (
+        assets.filter(asset => selectedIds.has(asset.id) || asset.alwaysInclude).slice(0, 8)
+    ), [assets, selectedIds]);
     const activeAsset = useMemo(() => {
         if (assets.length === 0) return null;
         return assets.find(asset => asset.id === activeId) || assets[0];
@@ -174,6 +177,31 @@ export default function SidebarAssetLibrary({ config, onConfigChange, onPrompt }
         onPrompt?.(prompts[kind], { displayText: `Asset prompt: ${activeAsset.name}` });
     }
 
+    function handleReferenceBoardPrompt() {
+        if (!boardAssets.length) {
+            setStatus('Attach assets first');
+            setTimeout(() => setStatus(''), 1800);
+            return;
+        }
+        const assetLines = boardAssets.map(asset => [
+            `- ${asset.name}`,
+            `category ${CATEGORY_LABELS[asset.category] || asset.category || 'Reference'}`,
+            asset.notes ? `notes: ${asset.notes}` : 'no notes',
+            asset.alwaysInclude ? 'brand kit pinned' : 'attached'
+        ].join(' / '));
+        onPrompt?.([
+            'Use the attached local assets as a labeled visual reference board for a polished 5 second motion graphic.',
+            'Preserve recognizable logos/products/backgrounds. Use exact file URLs supplied by Resolve AI when placing images.',
+            'Do not redraw logos or product shots from memory. If an asset is a mood/reference image, borrow composition, color, or texture without copying unrelated text.',
+            '',
+            `Reference board:\n${assetLines.join('\n')}`,
+            '',
+            'Create one complete HTML overlay with window.renderFrame(frame, fps) and window.getAnimationDuration().'
+        ].join('\n'), { displayText: 'Asset reference board' });
+        setStatus('Board added');
+        setTimeout(() => setStatus(''), 1800);
+    }
+
     const inspected = activeDetails?.id === activeAsset?.id ? activeDetails : activeAsset;
     const health = inspected?.health || [];
     const dimensions = inspected?.dimensions;
@@ -216,6 +244,13 @@ export default function SidebarAssetLibrary({ config, onConfigChange, onPrompt }
                         <span>{selectedCount} attached</span>
                         <span>{pinnedCount} pinned</span>
                     </div>
+                    <button
+                        className="asset-board-action"
+                        onClick={handleReferenceBoardPrompt}
+                        disabled={boardAssets.length === 0}
+                    >
+                        Use attached assets as reference board
+                    </button>
                     <div className="asset-list">
                         {assets.map(asset => {
                             const selected = selectedIds.has(asset.id);

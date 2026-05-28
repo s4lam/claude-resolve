@@ -3,7 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { pathToFileURL } = require('url');
-const { validateOverlayHtml } = require('../ipc/render-validation');
+const { summarizeCompatibility, validateOverlayHtml } = require('../ipc/render-validation');
 
 function codes(result) {
   return result.warnings.map(warning => warning.code);
@@ -16,6 +16,7 @@ function codes(result) {
   });
   assert(codes(result).includes('missing-duration'));
   assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.compatibility.status, 'blocked');
 }
 
 {
@@ -62,6 +63,15 @@ function codes(result) {
   });
   assert.strictEqual(result.duration, 5);
   assert(!codes(result).includes('missing-duration'));
+  assert.strictEqual(result.compatibility.status, 'ready');
+  assert(result.compatibility.chips.includes('5s'));
+}
+
+{
+  const summary = summarizeCompatibility([{ severity: 'warning' }], 4, { width: 1920, height: 1080, fps: 25 });
+  assert.strictEqual(summary.status, 'review');
+  assert(summary.score < 100);
+  assert(summary.chips.includes('1920x1080'));
 }
 
 {

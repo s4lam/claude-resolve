@@ -128,6 +128,30 @@ function findMissingFileAssets(html) {
   return [...new Set(missing)];
 }
 
+function summarizeCompatibility(warnings = [], duration = null, config = {}) {
+  const errorCount = warnings.filter(warning => warning.severity === 'error').length;
+  const warningCount = warnings.filter(warning => warning.severity !== 'error').length;
+  const status = errorCount > 0 ? 'blocked' : warningCount > 0 ? 'review' : 'ready';
+  const score = Math.max(0, Math.min(100, 100 - (errorCount * 35) - (warningCount * 12)));
+  const chips = [];
+
+  if (duration !== null && !Number.isNaN(duration)) chips.push(`${duration}s`);
+  if (config.width && config.height) chips.push(`${config.width}x${config.height}`);
+  if (config.fps) chips.push(`${config.fps}fps`);
+
+  return {
+    status,
+    label: status === 'blocked' ? 'Blocked' : status === 'review' ? 'Review' : 'Ready',
+    score,
+    chips,
+    summary: errorCount > 0
+      ? `${errorCount} blocking issue${errorCount === 1 ? '' : 's'} before render.`
+      : warningCount > 0
+        ? `${warningCount} render warning${warningCount === 1 ? '' : 's'} to review.`
+        : 'Ready for ProRes 4444 render.'
+  };
+}
+
 function validateOverlayHtml(input = {}) {
   const html = String(input.html || '');
   const prompt = String(input.prompt || '');
@@ -184,7 +208,8 @@ function validateOverlayHtml(input = {}) {
   return {
     ok: warnings.every(warning => warning.severity !== 'error'),
     duration,
-    warnings
+    warnings,
+    compatibility: summarizeCompatibility(warnings, duration, config)
   };
 }
 
@@ -192,5 +217,6 @@ module.exports = {
   findMissingFileAssets,
   hasOpaqueStageBackground,
   parseDuration,
+  summarizeCompatibility,
   validateOverlayHtml
 };

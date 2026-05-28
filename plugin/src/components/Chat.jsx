@@ -149,15 +149,37 @@ function RenderCard({ message, parsed, config, provider, model, onRegenerate, on
         setTimeout(() => setSaveStatus(''), 1800);
     }
 
+    const compatibility = validation?.compatibility;
+
     return (
         <div className="card">
             <div className="card-head">
                 <span className="card-name">{parsed.name}</span>
-                <span className={'badge ' + (realtime ? 'realtime' : 'frame')}>
-                    <span className="pulse" />{realtime ? 'Realtime' : 'Frame'}
+                <span className="card-head-badges">
+                    {compatibility && (
+                        <span className={'compat-pill ' + compatibility.status}>
+                            {compatibility.label}
+                        </span>
+                    )}
+                    <span className={'badge ' + (realtime ? 'realtime' : 'frame')}>
+                        <span className="pulse" />{realtime ? 'Realtime' : 'Frame'}
+                    </span>
                 </span>
             </div>
             <Preview parsed={parsed} selectedAssetIds={config.selectedAssetIds || []} />
+            {compatibility && (
+                <div className={'compat-summary ' + compatibility.status}>
+                    <div>
+                        <strong>{compatibility.label} · {compatibility.score}</strong>
+                        <span>{compatibility.summary}</span>
+                    </div>
+                    {compatibility.chips?.length > 0 && (
+                        <div className="compat-chips">
+                            {compatibility.chips.map(chip => <span key={chip}>{chip}</span>)}
+                        </div>
+                    )}
+                </div>
+            )}
             {validation?.warnings?.length > 0 && (
                 <div className="validation-list">
                     {validation.warnings.map(warning => (

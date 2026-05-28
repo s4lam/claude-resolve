@@ -10,6 +10,18 @@ function timecodeToSeconds(value, fps = 25) {
     return parts[0] * 3600 + parts[1] * 60 + parts[2] + (parts[3] / (Number(fps) || 25));
 }
 
+function secondsToTimecode(seconds, fps = 25) {
+    const rate = Number(fps) || 25;
+    const totalFrames = Math.max(0, Math.round(Number(seconds || 0) * rate));
+    const hours = Math.floor(totalFrames / (rate * 3600));
+    const minutes = Math.floor((totalFrames / (rate * 60)) % 60);
+    const wholeSeconds = Math.floor((totalFrames / rate) % 60);
+    const frames = totalFrames % rate;
+    return [hours, minutes, wholeSeconds, frames]
+        .map(value => String(value).padStart(2, '0'))
+        .join(':');
+}
+
 function normalizeTimelineContext(raw = {}, fallback = {}) {
     const fps = Number(raw.fps || fallback.fps) || null;
     const width = Number(raw.width || fallback.width) || null;
@@ -30,6 +42,7 @@ function normalizeTimelineContext(raw = {}, fallback = {}) {
         playheadSeconds,
         playheadFrame: playheadSeconds !== null && fps ? Math.round(playheadSeconds * fps) : null,
         selectedClips: normalizeSelectedClips(raw.selectedClips),
+        markers: normalizeMarkers(raw.markers, { fps, playheadFrame: playheadSeconds !== null && fps ? Math.round(playheadSeconds * fps) : null }),
         unavailable: Array.isArray(raw.unavailable) ? raw.unavailable : []
     };
 }
@@ -58,6 +71,55 @@ function normalizeSelectedClips(value) {
             ? Object.values(value)
             : [];
     return items.map(normalizeClip).filter(Boolean).slice(0, 6);
+}
+
+function inferMarkerAction(marker = {}) {
+    const text = [marker.name, marker.note, marker.customData].filter(Boolean).join(' ').toLowerCase();
+    if (/\b(lower|lower[-\s]?third|speaker|nameplate|name plate|location)\b/.test(text)) return 'lower-third';
+    if (/\b(transition|wipe|bridge|cut|stinger|interstitial)\b/.test(text)) return 'transition';
+    return 'title';
+}
+
+function normalizeMarker(frameId, raw = {}, options = {}) {
+    if (!raw || typeof raw !== 'object') return null;
+    const fps = Number(options.fps) || 25;
+    const frame = Number(raw.frameId ?? raw.frame ?? frameId);
+    if (!Number.isFinite(frame)) return null;
+    const seconds = frame / fps;
+    const durationFrames = Number(raw.duration ?? raw.Duration ?? raw.durationFrames ?? 0) || 0;
+    const marker = {
+        frame,
+        seconds,
+        timecode: secondsToTimecode(seconds, fps),
+        name: raw.name || raw.Name || raw.markerName || `Marker ${frame}`,
+        note: raw.note || raw.Note || raw.notes || '',
+        color: raw.color || raw.Color || '',
+        durationFrames,
+        customData: raw.customData || raw.CustomData || raw.custom_data || ''
+    };
+    return {
+        ...marker,
+        action: inferMarkerAction(marker),
+        distanceFromPlayhead: Number.isFinite(options.playheadFrame) ? Math.abs(frame - options.playheadFrame) : null
+    };
+}
+
+function normalizeMarkers(value, options = {}) {
+    const entries = Array.isArray(value)
+        ? value.map((item, index) => [item.frameId ?? item.frame ?? index, item])
+        : value && typeof value === 'object'
+            ? Object.entries(value)
+            : [];
+    return entries
+        .map(([frameId, marker]) => normalizeMarker(frameId, marker, options))
+        .filter(Boolean)
+        .sort((a, b) => {
+            if (a.distanceFromPlayhead !== null && b.distanceFromPlayhead !== null) {
+                return a.distanceFromPlayhead - b.distanceFromPlayhead;
+            }
+            return a.frame - b.frame;
+        })
+        .slice(0, 8);
 }
 
 async function safeCall(label, fn, unavailable, fallback = null) {
@@ -142,6 +204,7 @@ async function getTimelineContext() {
     let currentTimecode = null;
     let durationSeconds = null;
     let selectedClips = [];
+    let markers = [];
     try {
         const project = await getCurrentProject();
         const timeline = project ? await project.GetCurrentTimeline() : null;
@@ -151,6 +214,9 @@ async function getTimelineContext() {
             const fps = Number(settings?.fps || cfg.fps) || 25;
             if (Number(endFrame)) durationSeconds = Number(endFrame) / fps;
             selectedClips = await getSelectedClips(timeline, unavailable);
+            if (typeof timeline.GetMarkers === 'function') {
+                markers = await safeCall('timeline markers', () => timeline.GetMarkers(), unavailable, []);
+            }
         } else {
             unavailable.push('active timeline');
         }
@@ -169,6 +235,7 @@ async function getTimelineContext() {
         currentTimecode,
         durationSeconds,
         selectedClips,
+        markers,
         unavailable
     }, cfg);
 }
@@ -177,15 +244,31 @@ function typeLabel(type) {
     if (type === 'lower-third') return 'Lower third';
     if (type === 'transition') return 'Transition';
     if (type === 'rerender') return 'Re-render';
+    if (type === 'marker') return 'Marker';
     return 'Title';
 }
 
-function buildTimelinePrompt({ type = 'title', context = {}, render = null } = {}) {
-    const label = typeLabel(type);
+function markerLines(marker) {
+    if (!marker) return [];
+    return [
+        `Marker: ${marker.name || 'Untitled marker'}`,
+        marker.timecode ? `Timecode: ${marker.timecode}` : null,
+        marker.color ? `Color: ${marker.color}` : null,
+        marker.note ? `Note: ${marker.note}` : null,
+        marker.customData ? `Custom data: ${marker.customData}` : null,
+        marker.action ? `Suggested action: ${typeLabel(marker.action)}` : null
+    ].filter(Boolean);
+}
+
+function buildTimelinePrompt({ type = 'title', context = {}, render = null, marker = null } = {}) {
+    const promptType = type === 'marker' && marker ? inferMarkerAction(marker) : type;
+    const label = marker ? `Marker ${marker.name || typeLabel(promptType)}` : typeLabel(promptType);
     const fps = context.fps || 25;
     const width = context.width || 1920;
     const height = context.height || 1080;
-    const placement = context.currentTimecode
+    const placement = marker?.timecode
+        ? `Place timing around marker ${marker.timecode}.`
+        : context.currentTimecode
         ? `Place timing around playhead ${context.currentTimecode}.`
         : 'Use the current playhead as the intended placement.';
     const clipLines = (context.selectedClips || []).map(clip => [
@@ -194,13 +277,15 @@ function buildTimelinePrompt({ type = 'title', context = {}, render = null } = {
         clip.mediaType ? `type ${clip.mediaType}` : null,
         clip.startFrame !== null && clip.endFrame !== null ? `frames ${clip.startFrame}-${clip.endFrame}` : null
     ].filter(Boolean).join(' / '));
+    const markerContext = markerLines(marker);
 
-    if (type === 'rerender' && render) {
+    if (promptType === 'rerender' && render) {
         const metadata = render.metadata || {};
         return [
             'Re-render this saved Resolve AI history item for the current DaVinci Resolve timeline.',
             placement,
             `Timeline: ${context.timelineName || 'Unavailable'}. Canvas: ${width}x${height} at ${fps}fps.`,
+            markerContext.length ? `Marker context:\n${markerContext.join('\n')}` : '',
             clipLines.length ? `Selected clip context:\n${clipLines.join('\n')}` : 'Selected clip context unavailable.',
             '',
             `Original request: ${metadata.prompt || render.name}`,
@@ -220,27 +305,28 @@ function buildTimelinePrompt({ type = 'title', context = {}, render = null } = {
     };
 
     return [
-        `${typeInstructions[type] || typeInstructions.title}`,
+        `${typeInstructions[promptType] || typeInstructions.title}`,
         placement,
         `Timeline context: ${context.timelineName || 'Unavailable'} in project ${context.projectName || 'Unavailable'}.`,
         `Canvas: ${width}x${height}. FPS: ${fps}.`,
         context.durationSeconds ? `Timeline duration: about ${context.durationSeconds.toFixed(1)} seconds.` : 'Timeline duration unavailable.',
+        markerContext.length ? `Marker context:\n${markerContext.join('\n')}` : 'Marker context unavailable.',
         clipLines.length ? `Selected clip context:\n${clipLines.join('\n')}` : 'Selected clip context unavailable.',
         'Use transparent ProRes 4444-safe output when this is an overlay or transition.',
         'Use window.renderFrame(frame, fps) and window.getAnimationDuration().',
         'Keep the design universal for creators, editors, businesses, podcasts, education, sports, music, or events.',
         '',
-        `Return one complete HTML file for a ${label.toLowerCase()} at the playhead.`
+        `Return one complete HTML file for ${label.toLowerCase()} in the current timeline.`
     ].join('\n');
 }
 
 async function handleGenerateAtPlayhead(_event, payload = {}) {
     const context = payload.context || await getTimelineContext();
-    const prompt = buildTimelinePrompt({ type: payload.type, context, render: payload.render });
+    const prompt = buildTimelinePrompt({ type: payload.type, context, render: payload.render, marker: payload.marker });
     return {
         success: true,
         prompt,
-        displayText: `${typeLabel(payload.type)} at playhead`,
+        displayText: payload.marker?.name ? `${typeLabel(payload.type)}: ${payload.marker.name}` : `${typeLabel(payload.type)} at playhead`,
         context
     };
 }
@@ -252,9 +338,12 @@ function setupTimelineHandlers(ipcMain) {
 
 module.exports = {
     buildTimelinePrompt,
+    inferMarkerAction,
     normalizeClip,
+    normalizeMarkers,
     normalizeSelectedClips,
     normalizeTimelineContext,
+    secondsToTimecode,
     setupTimelineHandlers,
     timecodeToSeconds
 };

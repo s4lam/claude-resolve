@@ -34,6 +34,12 @@ export const CREATE_TYPES = [
         label: 'Product Reveal',
         help: 'Product shot, app, object, or feature reveal.',
         prompt: 'Create a premium product reveal motion graphic.'
+    },
+    {
+        id: 'social-repurpose',
+        label: 'Social Cutdown',
+        help: 'Safe-area title/caption system for shorts, reels, or posts.',
+        prompt: 'Create a social-first motion graphic that can be repurposed across vertical, square, and horizontal edits.'
     }
 ];
 
@@ -49,7 +55,8 @@ export const ASPECT_RATIOS = [
     ['16:9', '16:9 horizontal'],
     ['9:16', '9:16 vertical'],
     ['1:1', '1:1 square'],
-    ['4:5', '4:5 social']
+    ['4:5', '4:5 social'],
+    ['multi-social', 'Multi social safe areas']
 ];
 
 export const STYLE_LEVELS = [
@@ -79,6 +86,9 @@ export function buildCreatePrompt({ type, idea, duration, backgroundMode, aspect
         `Duration: ${duration || 5} seconds.`,
         `Background mode: ${backgroundMode}.`,
         `Aspect ratio: ${aspectRatio}. Canvas: ${width}x${height} at ${fps}fps.`,
+        aspectRatio === 'multi-social'
+            ? 'Design with visible safe-area guides in mind for 16:9, 9:16, 1:1, and 4:5 crops. Keep essential text and logos inside the central safe zone.'
+            : 'Respect the selected aspect ratio and keep important text inside safe margins.',
         timelineContext?.timelineName ? `Timeline: ${timelineContext.timelineName}.` : 'Timeline context unavailable.',
         timelineContext?.currentTimecode ? `Playhead: ${timelineContext.currentTimecode}.` : 'Playhead unavailable.',
         clipLines.length ? `Selected clip context:\n${clipLines.join('\n')}` : 'Selected clip context unavailable.',

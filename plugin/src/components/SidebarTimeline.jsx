@@ -22,6 +22,33 @@ function selectedClipText(context) {
     return `${clips.length} selected clips`;
 }
 
+function markerBatchPrompt(context, config) {
+    const markers = (context?.markers || []).slice(0, 4);
+    const width = context?.width || config.width || 1920;
+    const height = context?.height || config.height || 1080;
+    const fps = context?.fps || config.fps || 25;
+    const lines = markers.map((marker, index) => [
+        `${index + 1}. ${marker.name || 'Timeline marker'}`,
+        marker.timecode ? `timecode ${marker.timecode}` : null,
+        marker.action ? `type ${marker.action}` : null,
+        marker.color ? `color ${marker.color}` : null,
+        marker.note ? `note: ${marker.note}` : null
+    ].filter(Boolean).join(' / '));
+
+    return [
+        'Create a marker-based Resolve AI graphics set for the current DaVinci Resolve timeline.',
+        `Canvas: ${width}x${height}. FPS: ${fps}.`,
+        context?.timelineName ? `Timeline: ${context.timelineName}.` : 'Timeline name unavailable.',
+        '',
+        `Markers:\n${lines.join('\n')}`,
+        '',
+        'Return one complete HTML file per marker in separate ```html fenced blocks with clear FILE names.',
+        'Each file must use window.renderFrame(frame, fps) and window.getAnimationDuration().',
+        'Use transparent ProRes 4444-safe backgrounds for lower thirds, transitions, and overlays.',
+        'Keep the visual system consistent across all marker graphics.'
+    ].join('\n');
+}
+
 export default function SidebarTimeline({ config, onPrompt }) {
     const [context, setContext] = useState(null);
     const [renders, setRenders] = useState([]);
@@ -52,12 +79,13 @@ export default function SidebarTimeline({ config, onPrompt }) {
         setRenders((await window.overlayAPI.listRenders()).slice(0, 4));
     }
 
-    async function generate(type, render = null) {
+    async function generate(type, render = null, marker = null) {
         setStatus('Preparing');
         try {
             const result = await window.timelineAPI.generateAtPlayhead({
                 type,
                 render,
+                marker,
                 context: context || {
                     fps: config.fps,
                     width: config.width,
@@ -73,6 +101,17 @@ export default function SidebarTimeline({ config, onPrompt }) {
             setStatus('Timeline action failed');
             setTimeout(() => setStatus(''), 2200);
         }
+    }
+
+    function generateMarkerBatch() {
+        if (!context?.markers?.length) {
+            setStatus('No markers');
+            setTimeout(() => setStatus(''), 1800);
+            return;
+        }
+        const accepted = onPrompt(markerBatchPrompt(context, config), { displayText: 'Marker graphics set' });
+        setStatus(accepted === false ? 'Finish current run first' : 'Marker set added');
+        setTimeout(() => setStatus(''), 1800);
     }
 
     return (
@@ -106,6 +145,33 @@ export default function SidebarTimeline({ config, onPrompt }) {
                     </button>
                 ))}
             </div>
+
+            <div className="timeline-subhead-row">
+                <span className="timeline-subhead">Timeline markers</span>
+                <button className="mini-action" disabled={!context?.markers?.length} onClick={generateMarkerBatch}>
+                    Draft set
+                </button>
+            </div>
+            {context?.markers?.length ? (
+                <div className="timeline-marker-list">
+                    {context.markers.map(marker => (
+                        <button
+                            className="timeline-marker"
+                            key={`${marker.frame}-${marker.name}`}
+                            onClick={() => generate('marker', null, marker)}
+                            title={marker.note || marker.name}
+                        >
+                            <span>
+                                <strong>{marker.name || 'Timeline marker'}</strong>
+                                <small>{marker.timecode || 'time unavailable'} / {marker.color || 'marker'} / {marker.action || 'title'}</small>
+                            </span>
+                            {marker.note && <em>{marker.note}</em>}
+                        </button>
+                    ))}
+                </div>
+            ) : (
+                <div className="sb-empty">No timeline markers found</div>
+            )}
 
             <div className="timeline-subhead">Recent renders</div>
             {renders.length === 0 ? (

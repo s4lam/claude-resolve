@@ -778,6 +778,26 @@ body, #root {
 .tools-panel .asset-library-meta span {
     font-size: var(--fs-10p5);
 }
+.asset-board-action {
+    appearance: none;
+    min-height: var(--size-32);
+    border: var(--size-1) solid var(--cool-border);
+    border-radius: var(--size-7);
+    background: var(--cool-bg);
+    color: var(--cool-100);
+    font: var(--fs-11)/1.2 var(--font-sans);
+    cursor: pointer;
+}
+.asset-board-action:hover:not(:disabled),
+.asset-board-action:focus-visible {
+    outline: none;
+    border-color: var(--cool-300);
+    background: color-mix(in srgb, var(--cool-bg) 78%, var(--bg-3));
+}
+.asset-board-action:disabled {
+    opacity: .45;
+    cursor: default;
+}
 .tools-panel .asset-list {
     flex: 0 0 auto;
     max-height: 230px;
@@ -1395,9 +1415,59 @@ body, #root {
     color: var(--fg-0);
     font-weight: var(--weight-semibold);
 }
+.timeline-marker-list {
+    display: grid;
+    gap: var(--size-6);
+}
+.timeline-subhead-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--size-8);
+}
+.timeline-marker {
+    appearance: none;
+    border: var(--size-1) solid var(--line-soft);
+    border-radius: var(--size-7);
+    background: var(--bg-sunken);
+    color: var(--fg-1);
+    padding: var(--size-9);
+    display: grid;
+    gap: var(--size-5);
+    text-align: left;
+    cursor: pointer;
+}
+.timeline-marker:hover,
+.timeline-marker:focus-visible {
+    border-color: var(--cool-border);
+    background: var(--cool-bg);
+    outline: none;
+}
+.timeline-marker span {
+    display: grid;
+    gap: var(--size-3);
+}
+.timeline-marker strong {
+    color: var(--fg-0);
+    font-size: var(--fs-11p5);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.timeline-marker em {
+    color: var(--fg-2);
+    font-style: normal;
+    font-size: var(--fs-11);
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
 .timeline-action small,
 .timeline-subhead,
-.timeline-render small {
+.timeline-render small,
+.timeline-marker small {
     color: var(--fg-3);
     font: var(--fs-10p5)/1.35 var(--font-mono);
 }
@@ -2332,6 +2402,38 @@ body, #root {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.card-head-badges {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--size-5);
+    flex: 0 0 auto;
+}
+.compat-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--size-18);
+    padding: 0 var(--size-6);
+    border-radius: var(--size-4);
+    border: var(--size-1) solid var(--line-soft);
+    font: var(--fs-9p5)/1 var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-2);
+}
+.compat-pill.ready {
+    color: var(--cool-100);
+    border-color: var(--cool-border);
+    background: var(--cool-bg);
+}
+.compat-pill.review {
+    color: var(--warm-100);
+    border-color: var(--warm-border);
+    background: var(--warm-bg-soft);
+}
+.compat-pill.blocked {
+    color: var(--color-error);
+    border-color: var(--color-error);
+    background: var(--bg-error);
+}
 .badge {
     display: inline-flex;
     align-items: center;
@@ -2398,6 +2500,49 @@ body, #root {
 /* ▶ reads left-of-center: the triangle's mass sits left of its glyph
    box center, so nudge it right. ⏸ is symmetric and gets no nudge. */
 .card-play.play-glyph { padding-left: var(--size-4); }
+
+.compat-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--size-8);
+    padding: var(--size-8) var(--size-10);
+    border-top: var(--size-1) solid var(--line-soft);
+    background: var(--bg-sunken);
+}
+.compat-summary div:first-child {
+    display: grid;
+    gap: var(--size-3);
+    min-width: 0;
+}
+.compat-summary strong {
+    color: var(--fg-1);
+    font: var(--fs-11)/1.1 var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-1);
+}
+.compat-summary span {
+    color: var(--fg-3);
+    font-size: var(--fs-10p5);
+    line-height: 1.3;
+}
+.compat-summary.ready strong { color: var(--cool-100); }
+.compat-summary.review strong { color: var(--warm-100); }
+.compat-summary.blocked strong { color: var(--color-error); }
+.compat-chips {
+    display: flex;
+    gap: var(--size-4);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.compat-chips span {
+    color: var(--fg-2);
+    font: var(--fs-9p5)/1 var(--font-mono);
+    padding: var(--size-4) var(--size-6);
+    border-radius: var(--size-4);
+    background: var(--bg-3);
+    border: var(--size-1) solid var(--line-soft);
+}
 
 .card-foot {
     display: flex;

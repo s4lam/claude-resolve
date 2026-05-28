@@ -92,11 +92,11 @@ Each render can also write local sidecar metadata beside the .mov so the history
 ## Growth Features
 
 - **Prompt Gallery**: built-in creator, podcast, gaming, product, documentary, business, social, event, sports, and music prompts.
-- **Timeline tools**: generate titles, lower thirds, transitions, and re-renders with current timeline context.
-- **Create workflow**: choose motion type, duration, background mode, aspect ratio, style intensity, and review the generation brief before sending.
+- **Timeline tools**: generate titles, lower thirds, transitions, marker-based graphics, and re-renders with current timeline context.
+- **Create workflow**: choose motion type, duration, background mode, aspect ratio, social safe-area intent, style intensity, and review the generation brief before sending.
 - **Template Packs**: local JSON packs that contributors can submit and users can import from disk or GitHub raw URLs.
 - **Captions**: local SRT/VTT import, pasted transcript parsing, preview cues, and clean/kinetic/karaoke/social/podcast styles.
-- **Asset-aware generation**: drag/drop images, inspect asset health, attach logos/products/textures/reference images, and extract brand colors.
+- **Asset-aware generation**: drag/drop images, inspect asset health, attach logos/products/textures/reference images, build a selected-asset reference board, and extract brand colors.
 - **Variation previews**: draft multiple prompt variations with locks for logo, colors, layout, and animation-only changes.
 - **Fix with AI**: send render failures back to the active provider for repair.
 - **Showcase builder**: export a static local showcase page from saved templates/prompts.
