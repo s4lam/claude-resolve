@@ -27,6 +27,8 @@ function createWindow() {
     mainWindow = new BrowserWindow({
         width: 500,
         height: 700,
+        minWidth: 420,
+        minHeight: 560,
         alwaysOnTop: true,
         frame: false,
         titleBarStyle: 'hidden',
@@ -65,11 +67,39 @@ app.whenReady().then(async () => {
     setupSessionHandlers(ipcMain);
     ipcMain.handle('window:resize', (_event, { width, height }) => {
         mainWindow.setSize(width, height);
+        return getWindowState();
+    });
+    ipcMain.handle('window:minimize', () => {
+        mainWindow.minimize();
+        return getWindowState();
+    });
+    ipcMain.handle('window:toggleMaximize', () => {
+        if (mainWindow.isMaximized()) mainWindow.unmaximize();
+        else mainWindow.maximize();
+        return getWindowState();
+    });
+    ipcMain.handle('window:close', () => {
+        mainWindow.close();
+        return { closed: true };
+    });
+    ipcMain.handle('window:getState', () => {
+        return getWindowState();
     });
     ipcMain.handle('shell:openExternal', (_event, url) => {
         shell.openExternal(url);
     });
 });
+
+function getWindowState() {
+    if (!mainWindow) return { maximized: false, fullScreen: false };
+    const [width, height] = mainWindow.getSize();
+    return {
+        width,
+        height,
+        maximized: mainWindow.isMaximized(),
+        fullScreen: mainWindow.isFullScreen()
+    };
+}
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();

@@ -22,6 +22,136 @@ body, #root {
 
 ::selection { background: var(--sel-bg); color: var(--white); }
 
+/* ───────────── custom window chrome ───────────── */
+
+.window-chrome {
+    flex: 0 0 auto;
+    min-height: var(--size-38);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
+    border-bottom: var(--size-1) solid var(--line-soft);
+    background:
+        linear-gradient(180deg, var(--bg-2), var(--bg-1));
+    color: var(--fg-1);
+    user-select: none;
+}
+.window-drag-region {
+    -webkit-app-region: drag;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--size-12);
+    padding: var(--size-5) var(--size-8) var(--size-5) var(--size-10);
+}
+.chrome-brand {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--size-8);
+}
+.chrome-logo {
+    width: var(--size-22);
+    height: var(--size-22);
+    flex: 0 0 auto;
+    border-radius: var(--size-5);
+    background: var(--bg-1) url("../assets/resolve-ai-icon.svg") center / var(--bg-fit-avatar) no-repeat;
+    border: var(--size-1) solid var(--line);
+}
+.chrome-title {
+    min-width: 0;
+    display: grid;
+    gap: var(--size-2);
+}
+.chrome-title strong {
+    min-width: 0;
+    color: var(--fg-0);
+    font: var(--fs-12p5)/1 var(--font-sans);
+    font-weight: var(--weight-semibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.chrome-title span {
+    min-width: 0;
+    color: var(--fg-3);
+    font: var(--fs-9p5)/1 var(--font-mono);
+    text-transform: uppercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.chrome-status {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--size-6);
+    color: var(--fg-3);
+    font: var(--fs-10p5)/1 var(--font-sans);
+    white-space: nowrap;
+}
+.chrome-status span {
+    width: var(--size-7);
+    height: var(--size-7);
+    border-radius: 50%;
+    background: var(--fg-4);
+    box-shadow: var(--shadow-dot-dim);
+}
+.chrome-status.ready span {
+    background: var(--cool-300);
+    box-shadow: 0 0 var(--size-8) var(--cool-300);
+}
+.chrome-status.not-logged-in span,
+.chrome-status.checking span {
+    background: var(--warm-200);
+}
+.chrome-status.not-installed span,
+.chrome-status.unknown span {
+    background: var(--color-error);
+}
+.chrome-status em {
+    font-style: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.window-controls {
+    -webkit-app-region: no-drag;
+    display: flex;
+    align-items: stretch;
+}
+.window-control {
+    appearance: none;
+    width: var(--size-38);
+    min-height: var(--size-38);
+    border: 0;
+    border-left: var(--size-1) solid var(--line-soft);
+    background: transparent;
+    color: var(--fg-2);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: color var(--duration-fast) ease,
+                background var(--duration-fast) ease,
+                transform var(--duration-fast) var(--ease-out-quint);
+}
+.window-control:hover {
+    color: var(--fg-0);
+    background: var(--bg-3);
+}
+.window-control:focus-visible {
+    outline: none;
+    box-shadow: inset var(--shadow-focus-ring);
+}
+.window-control:active {
+    transform: scale(.96);
+}
+.window-control.close:hover {
+    color: var(--white);
+    background: var(--color-error);
+}
+
 /* ───────────── body / layout ───────────── */
 
 .body {

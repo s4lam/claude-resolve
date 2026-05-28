@@ -67,6 +67,10 @@ contextBridge.exposeInMainWorld('claudeAPI', createAgentBridge('claude'));
 
 contextBridge.exposeInMainWorld('windowAPI', {
     resize: ({ width, height }) => ipcRenderer.invoke('window:resize', { width, height }),
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
+    close: () => ipcRenderer.invoke('window:close'),
+    getState: () => ipcRenderer.invoke('window:getState'),
     openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url)
 });
 

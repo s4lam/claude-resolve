@@ -69,3 +69,33 @@ export const Insta = (p) => (
         <circle cx="17.5" cy="6.5" r=".8" fill="currentColor" />
     </svg>
 );
+
+export const Minimize = (p) => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="2.2" strokeLinecap="round" {...p}>
+        <path d="M5 12h14" />
+    </svg>
+);
+
+export const Maximize = (p) => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+        <rect x="5" y="5" width="14" height="14" rx="2" />
+    </svg>
+);
+
+export const Restore = (p) => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+        <rect x="8" y="8" width="11" height="11" rx="2" />
+        <path d="M5 15V7a2 2 0 0 1 2-2h8" />
+    </svg>
+);
+
+export const Close = (p) => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="2.2" strokeLinecap="round" {...p}>
+        <path d="M6 6l12 12" />
+        <path d="M18 6L6 18" />
+    </svg>
+);

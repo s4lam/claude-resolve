@@ -4,6 +4,7 @@ import ChatInput from './ChatInput';
 import Sidebar from './Sidebar';
 import WelcomeScreen from './WelcomeScreen';
 import PromptPresets from './PromptPresets';
+import WindowChrome from './WindowChrome';
 
 function tryParseStandardHTML(text) {
     const matches = [...String(text || '').matchAll(/```html\s*\n(?:(?:\/\/|<!--)\s*FILE:\s*(\S+\.html)(?:\s*-->)?\s*\n)?([\s\S]*?)```/g)];
@@ -556,7 +557,12 @@ export default function App() {
     }
 
     function resizeForSidebar(open) {
-        window.windowAPI.resize({ width: open ? 900 : 500, height: 740 }).catch(() => {});
+        window.windowAPI.getState?.().then(state => {
+            if (state?.maximized || state?.fullScreen) return;
+            window.windowAPI.resize({ width: open ? 900 : 500, height: 740 }).catch(() => {});
+        }).catch(() => {
+            window.windowAPI.resize({ width: open ? 900 : 500, height: 740 }).catch(() => {});
+        });
     }
 
     function showSidebarView(view) {
@@ -591,9 +597,16 @@ export default function App() {
 
     const showWelcome = authInfo.status !== 'ready' || welcomed;
     const sidebarOpen = sidebar.open;
+    const chromeProvider = activeProvider || authInfo.provider || config.provider;
+    const chromeModel = chromeProvider === 'codex' ? config.codexModel : config.model;
 
     return (
         <>
+            <WindowChrome
+                authInfo={authInfo}
+                provider={chromeProvider}
+                model={chromeModel}
+            />
             <div className={'body' + (sidebarOpen ? ' sidebar-open' : '')}>
                 {sidebarOpen && (
                     <Sidebar
