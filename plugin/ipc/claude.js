@@ -7,8 +7,10 @@ const { addLog } = require('./agent-logs');
 const { formatSelectedAssets } = require('./assets');
 
 const MODEL_IDS = {
-    sonnet: 'claude-sonnet-4-20250514',
-    opus: 'claude-opus-4-20250514'
+    // Claude Code resolves aliases per account/region, which is safer than
+    // pinning dated model IDs that some users may not have access to.
+    sonnet: 'sonnet',
+    opus: 'opus'
 };
 
 let mainWindow = null;
