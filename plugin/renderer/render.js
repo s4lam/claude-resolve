@@ -275,6 +275,7 @@ function parseArgs(argv) {
         output: null,
         ffmpeg: 'ffmpeg',
         htmlPath: null,
+        outputFormat: 'prores',
         proresProfile: '4444',
         ffmpegThreads: 'auto',
         proxyOutput: null,
@@ -288,6 +289,7 @@ function parseArgs(argv) {
         else if (a === '--height') args.height = parseInt(argv[++i], 10);
         else if (a === '--output') args.output = argv[++i];
         else if (a === '--ffmpeg') args.ffmpeg = argv[++i];
+        else if (a === '--output-format') args.outputFormat = String(argv[++i] || 'prores').toLowerCase();
         else if (a === '--prores-profile') args.proresProfile = String(argv[++i] || '4444').toLowerCase();
         else if (a === '--ffmpeg-threads') args.ffmpegThreads = String(argv[++i] || 'auto');
         else if (a === '--proxy-output') args.proxyOutput = argv[++i];
@@ -333,6 +335,66 @@ function proxyQualityArgs(encoder, quality) {
         return q === 'high' ? ['-global_quality', '18'] : q === 'small' ? ['-global_quality', '28'] : ['-global_quality', '23'];
     }
     return q === 'high' ? ['-preset', 'fast', '-crf', '16'] : q === 'small' ? ['-preset', 'veryfast', '-crf', '28'] : ['-preset', 'veryfast', '-crf', '22'];
+}
+
+function finalOutputArgs(args, framesDir, threads) {
+    if (args.outputFormat === 'hevc_nvenc_hq') {
+        return {
+            encoder: 'hevc_nvenc',
+            ffmpegArgs: [
+                '-y',
+                '-framerate', String(args.fps),
+                '-i', path.join(framesDir, 'frame_%06d.png'),
+                '-vf', 'format=yuv420p',
+                '-c:v', 'hevc_nvenc',
+                '-preset', 'slow',
+                '-tune', 'hq',
+                '-rc', 'constqp',
+                '-init_qpI', '22',
+                '-init_qpP', '25',
+                '-init_qpB', '28',
+                '-bf', '3',
+                '-b_ref_mode', 'middle',
+                '-rc-lookahead', '32',
+                '-multipass', 'fullres',
+                '-profile:v', 'main',
+                ...(threads ? ['-threads', threads] : []),
+                '-movflags', '+faststart',
+                args.output
+            ]
+        };
+    }
+    if (args.outputFormat === 'h264') {
+        const encoder = proxyEncoderValue(args.proxyEncoder);
+        return {
+            encoder,
+            ffmpegArgs: [
+                '-y',
+                '-framerate', String(args.fps),
+                '-i', path.join(framesDir, 'frame_%06d.png'),
+                '-vf', 'format=yuv420p',
+                '-c:v', encoder,
+                ...proxyQualityArgs(encoder, args.proxyQuality),
+                ...(threads ? ['-threads', threads] : []),
+                '-movflags', '+faststart',
+                args.output
+            ]
+        };
+    }
+    return {
+        encoder: 'prores_ks',
+        ffmpegArgs: [
+            '-y',
+            '-framerate', String(args.fps),
+            '-i', path.join(framesDir, 'frame_%06d.png'),
+            '-c:v', 'prores_ks',
+            '-profile:v', proresProfileValue(args.proresProfile),
+            '-pix_fmt', 'yuva444p10le',
+            '-vendor', 'apl0',
+            ...(threads ? ['-threads', threads] : []),
+            args.output,
+        ]
+    };
 }
 
 function runFfmpeg(ffmpeg, ffmpegArgs, failurePrefix) {
@@ -447,20 +509,13 @@ async function main() {
         await browser.close();
 
         const threads = normalizedThreads(args.ffmpegThreads);
-        const ffmpegArgs = [
-            '-y',
-            '-framerate', String(args.fps),
-            '-i', path.join(framesDir, 'frame_%06d.png'),
-            '-c:v', 'prores_ks',
-            '-profile:v', proresProfileValue(args.proresProfile),
-            '-pix_fmt', 'yuva444p10le',
-            '-vendor', 'apl0',
-            ...(threads ? ['-threads', threads] : []),
-            args.output,
-        ];
+        const finalOutput = finalOutputArgs(args, framesDir, threads);
 
         emit({ type: 'encoding' });
-        const result = runFfmpeg(args.ffmpeg, ffmpegArgs, 'FFmpeg');
+        if (args.outputFormat !== 'prores') {
+            emit({ type: 'warning', message: 'MP4 output does not preserve transparency/alpha.' });
+        }
+        const result = runFfmpeg(args.ffmpeg, finalOutput.ffmpegArgs, 'FFmpeg');
         if (!result.ok) {
             emit({ type: 'error', message: result.error });
             process.exit(1);

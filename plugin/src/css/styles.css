@@ -1997,6 +1997,54 @@ body, #root {
     color: var(--fg-2);
     font: var(--fs-10p5)/1.4 var(--font-sans);
 }
+.render-export-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+    gap: var(--size-6);
+}
+.render-export-summary > div {
+    min-width: 0;
+    display: grid;
+    gap: var(--size-4);
+    padding: var(--size-8);
+    border: var(--size-1) solid var(--line-soft);
+    border-radius: var(--size-6);
+    background: var(--bg-sunken);
+}
+.render-export-summary span {
+    color: var(--fg-3);
+    font: var(--fs-9p5)/1 var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: var(--track-08);
+}
+.render-export-summary strong {
+    min-width: 0;
+    color: var(--fg-1);
+    font: var(--fs-11p5)/1.2 var(--font-sans);
+    font-weight: var(--weight-semibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.render-settings-preset {
+    display: grid;
+    gap: var(--size-6);
+    padding: var(--size-8);
+    border: var(--size-1) solid var(--cool-border);
+    border-radius: var(--size-6);
+    background: var(--cool-bg-soft);
+}
+.render-settings-preset strong {
+    color: var(--cool-100);
+    font: var(--fs-11)/1 var(--font-sans);
+    font-weight: var(--weight-semibold);
+}
+.render-settings-preset code {
+    color: var(--fg-2);
+    font: var(--fs-9p5)/1.45 var(--font-mono);
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
 .settings-toggle {
     min-height: var(--size-32);
     display: inline-flex;

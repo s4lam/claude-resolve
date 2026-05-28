@@ -3,7 +3,7 @@
 **AI motion graphics inside DaVinci Resolve**
 *by Oleg Kupshukov*
 
-Resolve AI is a Workflow Integration Plugin that brings AI-powered motion graphics generation directly into DaVinci Resolve Studio. Describe what you want in plain text, and either Claude Code or OpenAI Codex generates the animation code, renders it to ProRes 4444 with alpha transparency, and imports it to your timeline.
+Resolve AI is a Workflow Integration Plugin that brings AI-powered motion graphics generation directly into DaVinci Resolve Studio. Describe what you want in plain text, and either Claude Code or OpenAI Codex generates the animation code, renders it with ProRes MOV, CPU MP4, or GPU MP4 presets, and imports it to your timeline.
 
 <img src="screenshots/welcome_screen.png" alt="Welcome screen" width="600">
 
@@ -70,7 +70,7 @@ Codex auth is handled only by the Codex CLI (`codex login` / `codex login status
 2. Pick Codex or Claude in Settings
 3. Click a Prompt Gallery item or type a prompt
 4. Preview the generated motion graphic
-5. Click **Render .mov** to import a ProRes 4444 overlay at the playhead
+5. Click **Render .mov** or **Render .mp4** to import the selected render preset at the playhead
 6. Use **Sessions**, **Timeline tools**, **Regenerate**, **Fix with AI**, **Save as Template**, or render history to iterate
 
 ### Prompt → Render Examples
@@ -84,7 +84,7 @@ Codex auth is handled only by the Codex CLI (`codex login` / `codex login status
 
 ## How it works
 
-Generates one-off HTML animations rendered frame-by-frame to ProRes 4444 .mov with alpha transparency via Playwright + ffmpeg. Full creative freedom: CSS animations, SVG, Canvas, filters, blur, backdrop-filter. The rendered .mov is automatically imported to your current timeline on an empty track at the playhead position.
+Generates one-off HTML animations rendered frame-by-frame via Playwright + ffmpeg. Use ProRes 4444 .mov for alpha transparency overlays, CPU MP4 Quality for portable H.264 exports, or GPU MP4 Quality for NVIDIA HEVC NVENC HQ. The rendered file is automatically imported to your current timeline on an empty track at the playhead position.
 Each render can also write local sidecar metadata beside the .mov so the history browser can search, restore prompts, and re-render previous work.
 
 **Use it for:** title cards, text reveals, glitch effects, lower thirds, transitions — any specific animation for the project at hand.
@@ -99,7 +99,7 @@ Each render can also write local sidecar metadata beside the .mov so the history
 - **Captions**: local SRT/VTT import, pasted transcript parsing, preview cues, and clean/kinetic/karaoke/social/podcast styles.
 - **Asset-aware generation**: drag/drop images, inspect asset health, attach logos/products/textures/reference images, build a selected-asset reference board, and extract brand colors.
 - **Variation previews**: draft multiple prompt variations with locks for logo, colors, layout, and animation-only changes.
-- **Render settings**: choose ProRes 4444/4444 XQ, FFmpeg thread limits, and optional MP4 proxy copies using NVENC, VideoToolbox, Quick Sync, or software H.264.
+- **Render settings**: choose Resolve-style presets for ProRes MOV, CPU MP4 Quality, or GPU MP4 Quality, plus FFmpeg thread limits, ProRes 4444/4444 XQ, and optional MP4 proxy copies.
 - **Fix with AI**: send render failures back to the active provider for repair.
 - **Showcase builder**: export a static local showcase page from saved templates/prompts.
 
@@ -114,7 +114,7 @@ Open the sidebar (gear icon) to configure:
 - **Provider Health**: installed/login/version status for Claude and Codex, plus a collapsible raw log drawer for troubleshooting
 - **Brand Kit**: local colors, fonts, logo path, tone, and common phrases injected into new generations
 - **Timeline**: quick actions that use current timeline FPS, resolution, playhead, and duration when Resolve exposes them
-- **Render**: ProRes profile, FFmpeg threads, and optional hardware-encoded MP4 proxy settings. Final alpha `.mov` output stays ProRes 4444 for Resolve compatibility.
+- **Render**: final preset, format, codec, encoder, ProRes profile, FFmpeg threads, hardware H.264, and HEVC NVENC HQ settings. Use ProRes `.mov` for transparency; use MP4 only when alpha is not needed.
 - **Sessions**: create, reopen, rename, search, and delete local project chat sessions
 - **Asset Library**: drag/drop local PNG/JPG/WebP/SVG/GIF assets, inspect dimensions/health, attach selected assets to new prompts, and provide notes so the AI uses them correctly
 - **Variations**: generate multiple prompt directions and lock logo/colors/layout/animation behavior

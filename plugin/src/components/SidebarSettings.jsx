@@ -8,8 +8,66 @@ const STATUS_LABELS = {
     unknown: 'Unknown'
 };
 
+const RENDER_PRESETS = {
+    prores_mov: {
+        label: 'ProRes MOV',
+        help: 'Alpha overlay, best for timeline graphics.',
+        format: 'MOV',
+        codec: 'ProRes 4444',
+        encoder: 'CPU',
+        alpha: 'Yes',
+        patch: {
+            renderPreset: 'prores_mov',
+            outputFormat: 'prores',
+            proresProfile: '4444',
+            createProxy: false,
+            proxyEncoder: 'auto',
+            proxyQuality: 'balanced'
+        }
+    },
+    mp4_cpu_quality: {
+        label: 'CPU MP4 Quality',
+        help: 'High-quality H.264 export without alpha.',
+        format: 'MP4',
+        codec: 'H.264',
+        encoder: 'CPU',
+        alpha: 'No',
+        patch: {
+            renderPreset: 'mp4_cpu_quality',
+            outputFormat: 'h264',
+            proresProfile: '4444',
+            createProxy: false,
+            proxyEncoder: 'libx264',
+            proxyQuality: 'high'
+        }
+    },
+    mp4_gpu_quality: {
+        label: 'GPU MP4 Quality',
+        help: 'NVIDIA HEVC NVENC HQ export without alpha.',
+        format: 'MP4',
+        codec: 'H.265 / HEVC',
+        encoder: 'NVIDIA',
+        alpha: 'No',
+        patch: {
+            renderPreset: 'mp4_gpu_quality',
+            outputFormat: 'hevc_nvenc_hq',
+            proresProfile: '4444',
+            createProxy: false,
+            proxyEncoder: 'h264_nvenc',
+            proxyQuality: 'high'
+        }
+    }
+};
+
 function statusLabel(state) {
     return STATUS_LABELS[state] || String(state || 'unknown').replace(/-/g, ' ');
+}
+
+function presetIdForRenderSettings(settings = {}) {
+    if (RENDER_PRESETS[settings.renderPreset]) return settings.renderPreset;
+    if (settings.outputFormat === 'hevc_nvenc_hq') return 'mp4_gpu_quality';
+    if (settings.outputFormat === 'h264') return 'mp4_cpu_quality';
+    return 'prores_mov';
 }
 
 function SettingsHeader({ provider, model, onShowTools, onClose }) {
@@ -224,6 +282,8 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
     const timelineText = timelineStatus || `${config.width}×${config.height} / ${config.fps}fps`;
     const activeProviderStatus = health?.providers?.[activeProvider]?.status || health?.providers?.[provider]?.status || 'unknown';
     const renderSettings = {
+        renderPreset: 'prores_mov',
+        outputFormat: 'prores',
         proresProfile: '4444',
         threads: 'auto',
         createProxy: false,
@@ -231,9 +291,12 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
         proxyQuality: 'balanced',
         ...(config.render || {})
     };
-    const renderMeta = renderSettings.createProxy
-        ? `${renderSettings.proxyEncoder === 'auto' ? 'auto proxy' : renderSettings.proxyEncoder}`
-        : 'ProRes alpha';
+    const renderPresetId = presetIdForRenderSettings(renderSettings);
+    const renderPreset = RENDER_PRESETS[renderPresetId] || RENDER_PRESETS.prores_mov;
+    const renderMeta = renderPreset.label;
+    const renderCodec = renderSettings.outputFormat === 'prores' && renderSettings.proresProfile === '4444xq'
+        ? 'ProRes 4444 XQ'
+        : renderPreset.codec;
     const brandFilledCount = useMemo(() => {
         return ['colors', 'fonts', 'tone', 'logoPath', 'phrases'].filter(key => String(brandKit[key] || '').trim()).length;
     }, [brandKit]);
@@ -332,13 +395,43 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
 
                 <SettingsSection title="Render" meta={renderMeta} defaultOpen={false}>
                     <div className="render-settings-note">
-                        Final timeline output stays ProRes 4444 with alpha. NVENC and other hardware encoders are used only for optional MP4 preview/proxy copies because they do not preserve ProRes alpha.
+                        Pick the final deliverable first. ProRes MOV keeps transparency for Resolve overlays. MP4 presets are smaller and faster, but flatten alpha.
+                    </div>
+                    <SettingRow label="Preset" help={renderPreset.help}>
+                        <select
+                            className="select"
+                            value={renderPresetId}
+                            onChange={e => updateRenderSetting(RENDER_PRESETS[e.target.value]?.patch || RENDER_PRESETS.prores_mov.patch)}
+                        >
+                            <option value="prores_mov">ProRes MOV</option>
+                            <option value="mp4_cpu_quality">CPU MP4 Quality</option>
+                            <option value="mp4_gpu_quality">GPU MP4 Quality</option>
+                        </select>
+                    </SettingRow>
+                    <div className="render-export-summary" aria-label="Current render export settings">
+                        <div>
+                            <span>Format</span>
+                            <strong>{renderPreset.format}</strong>
+                        </div>
+                        <div>
+                            <span>Codec</span>
+                            <strong>{renderCodec}</strong>
+                        </div>
+                        <div>
+                            <span>Encoder</span>
+                            <strong>{renderPreset.encoder}</strong>
+                        </div>
+                        <div>
+                            <span>Alpha</span>
+                            <strong>{renderPreset.alpha}</strong>
+                        </div>
                     </div>
                     <SettingRow label="ProRes profile" help="4444 is smaller. 4444 XQ is heavier and slower.">
                         <select
                             className="select"
                             value={renderSettings.proresProfile}
                             onChange={e => updateRenderSetting({ proresProfile: e.target.value })}
+                            disabled={renderSettings.outputFormat !== 'prores'}
                         >
                             <option value="4444">ProRes 4444</option>
                             <option value="4444xq">ProRes 4444 XQ</option>
@@ -358,22 +451,23 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
                             <option value="16">16 threads</option>
                         </select>
                     </SettingRow>
-                    <SettingRow label="MP4 proxy" help="Optional fast preview copy beside the .mov. The .mov is still imported to Resolve.">
+                    <SettingRow label="MP4 proxy" help="For ProRes final renders, also create a fast preview copy beside the .mov.">
                         <label className="settings-toggle">
                             <input
                                 type="checkbox"
-                                checked={!!renderSettings.createProxy}
+                                checked={renderSettings.outputFormat === 'prores' && !!renderSettings.createProxy}
+                                disabled={renderSettings.outputFormat !== 'prores'}
                                 onChange={e => updateRenderSetting({ createProxy: e.target.checked })}
                             />
-                            <span>{renderSettings.createProxy ? 'Create proxy' : 'Off'}</span>
+                            <span>{renderSettings.outputFormat !== 'prores' ? 'Not needed for MP4 final' : renderSettings.createProxy ? 'Create proxy' : 'Off'}</span>
                         </label>
                     </SettingRow>
-                    <SettingRow label="Proxy encoder" help="Use NVENC on NVIDIA GPUs, VideoToolbox on Apple Silicon, or software fallback.">
+                    <SettingRow label="H.264 encoder" help="Used for MP4 final renders and optional MP4 proxies.">
                         <select
                             className="select"
                             value={renderSettings.proxyEncoder}
                             onChange={e => updateRenderSetting({ proxyEncoder: e.target.value })}
-                            disabled={!renderSettings.createProxy}
+                            disabled={renderSettings.outputFormat === 'hevc_nvenc_hq' || (renderSettings.outputFormat === 'prores' && !renderSettings.createProxy)}
                         >
                             <option value="auto">Auto hardware</option>
                             <option value="h264_nvenc">NVIDIA NVENC H.264</option>
@@ -382,12 +476,18 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
                             <option value="libx264">Software H.264</option>
                         </select>
                     </SettingRow>
-                    <SettingRow label="Proxy quality" help="Small is faster/lighter. High is larger.">
+                    {renderPresetId === 'mp4_gpu_quality' && (
+                        <div className="render-settings-preset">
+                            <strong>GPU MP4 Quality preset</strong>
+                            <code>-c:v hevc_nvenc -preset slow -tune hq -rc constqp -init_qpI 22 -init_qpP 25 -init_qpB 28 -bf 3 -b_ref_mode middle -rc-lookahead 32 -multipass fullres -profile:v main</code>
+                        </div>
+                    )}
+                    <SettingRow label="H.264 quality" help="Small is faster/lighter. High is larger.">
                         <select
                             className="select"
                             value={renderSettings.proxyQuality}
                             onChange={e => updateRenderSetting({ proxyQuality: e.target.value })}
-                            disabled={!renderSettings.createProxy}
+                            disabled={renderSettings.outputFormat === 'hevc_nvenc_hq' || (renderSettings.outputFormat === 'prores' && !renderSettings.createProxy)}
                         >
                             <option value="small">Small / fastest</option>
                             <option value="balanced">Balanced</option>

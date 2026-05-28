@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { CONFIG_DIR } = require('./paths');
+const { applyRenderPreset, normalizeRenderSettings } = require('./render-settings');
 
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 const DEFAULT_BRAND_KIT = {
@@ -38,6 +39,8 @@ const DEFAULTS = {
         maxImportSizeMb: 25
     },
     render: {
+        renderPreset: 'prores_mov',
+        outputFormat: 'prores',
         proresProfile: '4444',
         threads: 'auto',
         createProxy: false,
@@ -53,6 +56,15 @@ const DEFAULTS = {
         recentIds: []
     }
 };
+
+function mergeRenderSettings(base = {}, patch = {}) {
+    const hasPresetPatch = Object.prototype.hasOwnProperty.call(patch, 'renderPreset');
+    const hasOutputPatch = Object.prototype.hasOwnProperty.call(patch, 'outputFormat');
+    const expandedPatch = hasPresetPatch && !hasOutputPatch
+        ? applyRenderPreset(patch.renderPreset, { threads: base.threads || 'auto', ...patch })
+        : patch;
+    return normalizeRenderSettings({ ...base, ...expandedPatch });
+}
 
 function mergeConfig(parsed = {}) {
     return {
@@ -70,7 +82,7 @@ function mergeConfig(parsed = {}) {
         },
         captions: { ...(DEFAULTS.captions || {}), ...(parsed.captions || {}) },
         assets: { ...(DEFAULTS.assets || {}), ...(parsed.assets || {}) },
-        render: { ...(DEFAULTS.render || {}), ...(parsed.render || {}) },
+        render: mergeRenderSettings(DEFAULTS.render || {}, parsed.render || {}),
         ui: { ...(DEFAULTS.ui || {}), ...(parsed.ui || {}) },
         gallery: {
             ...(DEFAULTS.gallery || {}),
@@ -106,7 +118,7 @@ function writeConfig(partial) {
         },
         captions: { ...(current.captions || DEFAULTS.captions), ...(partial.captions || {}) },
         assets: { ...(current.assets || DEFAULTS.assets), ...(partial.assets || {}) },
-        render: { ...(current.render || DEFAULTS.render), ...(partial.render || {}) },
+        render: mergeRenderSettings(current.render || DEFAULTS.render, partial.render || {}),
         ui: { ...(current.ui || {}), ...(partial.ui || {}) },
         gallery: {
             ...(current.gallery || DEFAULTS.gallery),

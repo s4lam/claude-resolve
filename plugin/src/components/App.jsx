@@ -104,6 +104,8 @@ export default function App() {
         captions: { defaultStyle: 'clean' },
         assets: { maxImportSizeMb: 25 },
         render: {
+            renderPreset: 'prores_mov',
+            outputFormat: 'prores',
             proresProfile: '4444',
             threads: 'auto',
             createProxy: false,

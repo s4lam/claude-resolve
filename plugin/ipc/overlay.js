@@ -7,7 +7,7 @@ const { spawn } = require('child_process');
 const { getResolve, getCurrentProject } = require('./resolve');
 const { readConfig } = require('./config');
 const { validateOverlayHtml } = require('./render-validation');
-const { normalizeRenderSettings, proxyPathFor } = require('./render-settings');
+const { extensionForRenderSettings, normalizeRenderSettings, proxyPathFor } = require('./render-settings');
 const { resolveAssetReferences } = require('./assets');
 const { createRenderQueue } = require('./render-queue');
 const {
@@ -21,23 +21,27 @@ const FFMPEG_PATH = findExecutable(FFMPEG_CANDIDATES, FFMPEG_VERIFY_CMD);
 
 console.log('RESOLVED: ffmpeg=' + FFMPEG_PATH);
 
-function renderFilename(name) {
+function renderFilename(name, extension = '.mov') {
     const safe = (name || 'Overlay').replace(/[^a-zA-Z0-9_-]/g, '_');
     const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15);
-    return `${safe}_${ts}.mov`;
+    return `${safe}_${ts}${extension}`;
 }
 
 function metadataPathFor(name) {
-    return path.join(RENDER_DIR, name.replace(/\.mov$/i, '.json'));
+    return path.join(RENDER_DIR, name.replace(/\.(mov|mp4)$/i, '.json'));
 }
 
 function thumbnailPathFor(name) {
-    return path.join(THUMBNAIL_DIR, name.replace(/\.mov$/i, '.png'));
+    return path.join(THUMBNAIL_DIR, name.replace(/\.(mov|mp4)$/i, '.png'));
 }
 
 function thumbnailUrlFor(name) {
     const thumbFile = thumbnailPathFor(name);
     return fs.existsSync(thumbFile) ? pathToFileURL(thumbFile).href : null;
+}
+
+function isRenderableOutput(name) {
+    return /\.(mov|mp4)$/i.test(name) && !/\.preview\.mp4$/i.test(name);
 }
 
 function readRenderMetadata(name) {
@@ -178,14 +182,14 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
     fs.mkdirSync(RENDER_DIR, { recursive: true });
 
     const htmlPath = path.join(tempDir, 'overlay.html');
-    const movPath = path.join(RENDER_DIR, renderFilename(name));
-    const proxyPath = normalizedRender.createProxy ? proxyPathFor(movPath) : null;
-    const movName = path.basename(movPath);
+    const outputPath = path.join(RENDER_DIR, renderFilename(name, extensionForRenderSettings(normalizedRender)));
+    const proxyPath = normalizedRender.outputFormat === 'prores' && normalizedRender.createProxy ? proxyPathFor(outputPath) : null;
+    const outputName = path.basename(outputPath);
     fs.writeFileSync(htmlPath, html);
 
     const renderScript = path.join(__dirname, '..', 'renderer', 'render.js');
 
-    console.log('RENDER: script=' + renderScript, 'html=' + htmlPath, 'out=' + movPath);
+    console.log('RENDER: script=' + renderScript, 'html=' + htmlPath, 'out=' + outputPath);
 
     const cleanupTempDir = () => {
         try { fs.rmSync(tempDir, { recursive: true, force: true }); }
@@ -200,8 +204,9 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
             '--fps', String(fps),
             '--width', String(width),
             '--height', String(height),
-            '--output', movPath,
+            '--output', outputPath,
             '--ffmpeg', FFMPEG_PATH,
+            '--output-format', normalizedRender.outputFormat,
             '--prores-profile', normalizedRender.proresProfile,
             '--ffmpeg-threads', normalizedRender.threads,
             ...(proxyPath ? [
@@ -243,23 +248,23 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
                 resolve({ success: false, error: errMsg });
                 return;
             }
-            const renderMetadata = writeRenderMetadata(movName, {
+            const renderMetadata = writeRenderMetadata(outputName, {
                 ...(metadata || {}),
-                title: name || movName.replace(/\.mov$/i, ''),
+                title: name || outputName.replace(/\.(mov|mp4)$/i, ''),
                 html,
                 fps,
                 width,
                 height,
                 renderSettings: normalizedRender,
                 proxyPath: proxyPath && fs.existsSync(proxyPath) ? proxyPath : null,
-                size: fs.existsSync(movPath) ? fs.statSync(movPath).size : null,
+                size: fs.existsSync(outputPath) ? fs.statSync(outputPath).size : null,
                 createdAt: metadata?.createdAt || new Date().toISOString()
             });
             try {
-                await importToTimeline(movPath);
-                resolve({ success: true, path: movPath, name: movName, metadata: renderMetadata });
+                await importToTimeline(outputPath);
+                resolve({ success: true, path: outputPath, name: outputName, metadata: renderMetadata });
             } catch (err) {
-                resolve({ success: true, path: movPath, name: movName, metadata: renderMetadata, warning: 'Rendered but import failed: ' + err.message });
+                resolve({ success: true, path: outputPath, name: outputName, metadata: renderMetadata, warning: 'Rendered but import failed: ' + err.message });
             }
         });
 
@@ -275,7 +280,7 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
 function handleListRenders() {
     if (!fs.existsSync(RENDER_DIR)) return [];
     return fs.readdirSync(RENDER_DIR)
-        .filter(f => f.endsWith('.mov'))
+        .filter(isRenderableOutput)
         .map(f => {
             const stat = fs.statSync(path.join(RENDER_DIR, f));
             const thumbnail = thumbnailUrlFor(f);
@@ -294,7 +299,7 @@ function handleListRenders() {
 
 async function handleSyncToMediaPool() {
     if (!fs.existsSync(RENDER_DIR)) return { synced: 0, total: 0 };
-    const files = fs.readdirSync(RENDER_DIR).filter(f => f.endsWith('.mov'));
+    const files = fs.readdirSync(RENDER_DIR).filter(isRenderableOutput);
     if (files.length === 0) return { synced: 0, total: 0 };
 
     const resolve = await getResolve();
@@ -325,7 +330,9 @@ async function handleSyncToMediaPool() {
 function handleDeleteRender(_event, name) {
     const p = path.join(RENDER_DIR, name);
     if (!fs.existsSync(p)) return false;
+    const metadataValue = readRenderMetadata(name);
     fs.rmSync(p);
+    if (metadataValue?.proxyPath && fs.existsSync(metadataValue.proxyPath)) fs.rmSync(metadataValue.proxyPath);
     const thumb = thumbnailPathFor(name);
     if (fs.existsSync(thumb)) fs.rmSync(thumb);
     const metadata = metadataPathFor(name);
@@ -338,10 +345,11 @@ function handleRenameRender(_event, name, nextName) {
     if (!fs.existsSync(source)) return { success: false, error: 'Render not found' };
 
     const safeBase = String(nextName || '')
-        .replace(/\.mov$/i, '')
+        .replace(/\.(mov|mp4)$/i, '')
         .replace(/[^a-zA-Z0-9_-]/g, '_')
-        .replace(/^_+|_+$/g, '') || name.replace(/\.mov$/i, '');
-    const targetName = `${safeBase}.mov`;
+        .replace(/^_+|_+$/g, '') || name.replace(/\.(mov|mp4)$/i, '');
+    const extension = path.extname(name).toLowerCase() === '.mp4' ? '.mp4' : '.mov';
+    const targetName = `${safeBase}${extension}`;
     const target = path.join(RENDER_DIR, targetName);
     if (fs.existsSync(target)) return { success: false, error: 'A render with that name already exists' };
 
@@ -352,6 +360,11 @@ function handleRenameRender(_event, name, nextName) {
     if (fs.existsSync(oldThumb)) fs.renameSync(oldThumb, newThumb);
 
     const oldMetadata = readRenderMetadata(name) || {};
+    if (oldMetadata.proxyPath && fs.existsSync(oldMetadata.proxyPath)) {
+        const nextProxy = proxyPathFor(target);
+        fs.renameSync(oldMetadata.proxyPath, nextProxy);
+        oldMetadata.proxyPath = nextProxy;
+    }
     const oldMetadataPath = metadataPathFor(name);
     if (fs.existsSync(oldMetadataPath)) fs.rmSync(oldMetadataPath);
     const metadata = writeRenderMetadata(targetName, oldMetadata);

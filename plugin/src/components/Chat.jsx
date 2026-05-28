@@ -5,10 +5,29 @@ import { Download } from './Icons';
 
 const REGENERATE_ACTIONS = ['More cinematic', 'Simpler', 'Transparent BG', 'Longer', 'Same style', '3 variations'];
 
+function renderFormat(config = {}) {
+    const settings = config.render || {};
+    if (settings.renderPreset === 'mp4_gpu_quality') {
+        return { extension: 'mp4', label: 'GPU MP4 Quality · HEVC NVENC HQ', short: 'GPU MP4' };
+    }
+    if (settings.renderPreset === 'mp4_cpu_quality') {
+        return { extension: 'mp4', label: 'CPU MP4 Quality · H.264', short: 'CPU MP4' };
+    }
+    if (settings.outputFormat === 'hevc_nvenc_hq') {
+        return { extension: 'mp4', label: 'HEVC NVENC HQ', short: 'HEVC NVENC HQ' };
+    }
+    if (settings.outputFormat === 'h264') {
+        return { extension: 'mp4', label: 'H.264 MP4', short: 'MP4' };
+    }
+    const profile = settings.proresProfile === '4444xq' ? 'ProRes 4444 XQ' : 'ProRes 4444';
+    return { extension: 'mov', label: profile, short: profile };
+}
+
 function RenderMovAction({ parsed, message, config, provider, model, validation, onRendered, onRepair }) {
     const [status, setStatus] = useState(null);
     const [progress, setProgress] = useState(0);
     const [errorMsg, setErrorMsg] = useState('');
+    const format = renderFormat(config);
 
     useEffect(() => {
         if (status !== 'rendering') return;
@@ -82,7 +101,7 @@ function RenderMovAction({ parsed, message, config, provider, model, validation,
     }
 
     if (status === null) {
-        return <button className="btn-render" onClick={handleRender}><Download /> Render .mov</button>;
+        return <button className="btn-render" onClick={handleRender}><Download /> Render .{format.extension}</button>;
     }
     if (status === 'rendering') {
         return (
@@ -122,6 +141,7 @@ function RenderCard({ message, parsed, config, provider, model, onRegenerate, on
     const [validation, setValidation] = useState(null);
     const [saveStatus, setSaveStatus] = useState('');
     const [renderResult, setRenderResult] = useState(null);
+    const format = renderFormat(config);
 
     useEffect(() => {
         let alive = true;
@@ -200,7 +220,7 @@ function RenderCard({ message, parsed, config, provider, model, onRegenerate, on
                 <div className="specs">
                     <span className="spec"><b>{config.width}×{config.height}</b></span>
                     <span className="spec">{config.fps} fps</span>
-                    <span className="spec alpha">ProRes 4444</span>
+                    <span className="spec alpha">{format.short}</span>
                 </div>
                 <RenderMovAction
                     parsed={parsed}
