@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import TitleBar from './TitleBar';
 import Chat from './Chat';
 import ChatInput from './ChatInput';
 import Sidebar from './Sidebar';
@@ -38,6 +37,55 @@ function tryParseStandardHTML(text) {
     return { type: 'html', name, html, mode };
 }
 
+function compactTitle(text, fallback = 'Untitled session') {
+    const value = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!value) return fallback;
+    return value.length > 72 ? value.slice(0, 71) + '…' : value;
+}
+
+function titleFromMessages(messages = [], fallback = 'Untitled session') {
+    const firstUser = messages.find(message => message?.type === 'user' && message.text);
+    return compactTitle(firstUser?.text, fallback);
+}
+
+function latestHtmlContext(messages = []) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const parsed = messages[i]?.parsed;
+        if (!parsed) continue;
+        const item = Array.isArray(parsed.items) ? parsed.items[0] : parsed;
+        if (item?.html) return { name: item.name || 'Overlay', html: item.html };
+    }
+    return null;
+}
+
+function buildSessionContinuationPrompt(promptText, session, messages = []) {
+    const recentTurns = messages
+        .filter(message => !message.isThinking && message.text)
+        .slice(-8)
+        .map(message => `${message.type === 'assistant' ? 'Assistant' : 'User'}: ${String(message.text).slice(0, 900)}`)
+        .join('\n\n');
+    const latestHtml = latestHtmlContext(messages);
+    if (!recentTurns && !latestHtml) return promptText;
+
+    return [
+        'Continue this saved Resolve AI session. Use the local session history below as context, but answer only the new user request.',
+        `Session: ${session?.title || 'Untitled session'}`,
+        session?.projectName ? `Project: ${session.projectName}` : '',
+        session?.timelineName ? `Timeline: ${session.timelineName}` : '',
+        '',
+        recentTurns ? 'Recent visible chat:' : '',
+        recentTurns,
+        '',
+        latestHtml ? `Latest generated HTML (${latestHtml.name}):` : '',
+        latestHtml ? '```html' : '',
+        latestHtml ? latestHtml.html : '',
+        latestHtml ? '```' : '',
+        '',
+        'New user request:',
+        promptText
+    ].filter(Boolean).join('\n');
+}
+
 export default function App() {
     const [authInfo, setAuthInfo] = useState({ status: 'checking', provider: 'auto', label: 'AI provider' });
     const [welcomed, setWelcomed] = useState(true);
@@ -54,10 +102,19 @@ export default function App() {
         generation: { variationCount: 3, locks: {} },
         captions: { defaultStyle: 'clean' },
         assets: { maxImportSizeMb: 25 },
+        render: {
+            proresProfile: '4444',
+            threads: 'auto',
+            createProxy: false,
+            proxyEncoder: 'auto',
+            proxyQuality: 'balanced'
+        },
         ui: { activeToolTab: 'create' },
         gallery: { favorites: [], recentIds: [] }
     });
     const [messages, setMessages] = useState([]);
+    const [sessions, setSessions] = useState([]);
+    const [activeSession, setActiveSession] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [activeTool, setActiveTool] = useState(null);
     const [activeProvider, setActiveProvider] = useState(null);
@@ -66,6 +123,11 @@ export default function App() {
     const [draftPrompt, setDraftPrompt] = useState({ text: '', revision: 0 });
     const nextId = useRef(0);
     const nextDraftRevision = useRef(1);
+    const messagesRef = useRef([]);
+    const activeSessionRef = useRef(null);
+    const suppressNextSessionSave = useRef(false);
+    const sessionSaveTimer = useRef(null);
+    const restoredSessionNeedsContext = useRef(false);
 
     useEffect(() => {
         function appendToLast(data) {
@@ -139,6 +201,7 @@ export default function App() {
                 }
             } catch { /* timeline settings are best-effort */ }
             setConfig(seededConfig);
+            initializeSession(seededConfig).catch(() => {});
             return agentAPI.checkAuth();
         }).then(setAuthInfo);
 
@@ -147,16 +210,204 @@ export default function App() {
             .catch(() => {});
 
         function handleUnload() {
+            saveCurrentSession().catch(() => {});
             window.resolveAPI.cleanup();
         }
         window.addEventListener('beforeunload', handleUnload);
         return () => window.removeEventListener('beforeunload', handleUnload);
     }, []);
 
+    useEffect(() => {
+        messagesRef.current = messages;
+    }, [messages]);
+
+    useEffect(() => {
+        activeSessionRef.current = activeSession;
+    }, [activeSession]);
+
+    useEffect(() => {
+        if (!activeSession?.id || !window.sessionsAPI) return undefined;
+        if (suppressNextSessionSave.current) {
+            suppressNextSessionSave.current = false;
+            return undefined;
+        }
+        clearTimeout(sessionSaveTimer.current);
+        sessionSaveTimer.current = setTimeout(() => {
+            saveCurrentSession().catch(() => {});
+        }, 450);
+        return () => clearTimeout(sessionSaveTimer.current);
+    }, [
+        messages,
+        activeSession?.id,
+        config.provider,
+        config.model,
+        config.codexModel,
+        config.width,
+        config.height,
+        config.fps,
+        config.selectedAssetIds,
+        activeProvider
+    ]);
+
+    async function readTimelineContext() {
+        try {
+            if (window.timelineAPI?.getContext) return await window.timelineAPI.getContext();
+        } catch { /* timeline context is best-effort */ }
+        try {
+            const [projectName, timelineName, settings] = await Promise.all([
+                window.resolveAPI.getProjectName(),
+                window.resolveAPI.getCurrentTimeline(),
+                window.resolveAPI.getTimelineSettings()
+            ]);
+            return {
+                projectName,
+                timelineName,
+                fps: settings?.fps,
+                width: settings?.width,
+                height: settings?.height
+            };
+        } catch {
+            return {};
+        }
+    }
+
+    function makeSessionPayload(context = {}, cfg = config, current = null, sessionMessages = messagesRef.current) {
+        const contextTitle = [current?.projectName || context.projectName, current?.timelineName || context.timelineName || context.name]
+            .filter(Boolean)
+            .join(' / ') || 'Untitled session';
+        const shouldDeriveTitle = sessionMessages.length > 0 && (
+            !current?.title ||
+            current.title === contextTitle ||
+            current.title === 'Untitled session'
+        );
+        const authProvider = ['claude', 'codex'].includes(authInfo.provider) ? authInfo.provider : null;
+        const provider = activeProvider || authProvider || cfg.provider;
+        return {
+            title: shouldDeriveTitle ? titleFromMessages(sessionMessages, contextTitle) : (current?.title || contextTitle),
+            projectName: current?.projectName || context.projectName || null,
+            timelineName: current?.timelineName || context.timelineName || context.name || null,
+            page: current?.page || context.page || null,
+            provider,
+            model: provider === 'codex' ? cfg.codexModel : cfg.model,
+            width: cfg.width || context.width || null,
+            height: cfg.height || context.height || null,
+            fps: cfg.fps || context.fps || null,
+            selectedAssetIds: cfg.selectedAssetIds || [],
+            messages: sessionMessages
+        };
+    }
+
+    async function refreshSessions() {
+        if (!window.sessionsAPI) return [];
+        const list = await window.sessionsAPI.list();
+        setSessions(list);
+        return list;
+    }
+
+    async function hydrateSession(session, options = {}) {
+        const safeMessages = Array.isArray(session?.messages) ? session.messages : [];
+        suppressNextSessionSave.current = true;
+        activeSessionRef.current = session;
+        setActiveSession(session);
+        setMessages(safeMessages);
+        setWelcomed(safeMessages.length === 0);
+        setIsProcessing(false);
+        setActiveTool(null);
+        setActiveProvider(null);
+        nextId.current = safeMessages.reduce((max, message) => Math.max(max, Number(message.id) || 0), 0) + 1;
+        restoredSessionNeedsContext.current = Boolean(options.needsContext && safeMessages.length > 0);
+        if (options.restartAgent) {
+            (window.agentAPI || window.claudeAPI).restart();
+        }
+        await window.sessionsAPI?.setActive?.(session.id);
+        await refreshSessions();
+    }
+
+    async function initializeSession(seededConfig) {
+        if (!window.sessionsAPI) return;
+        const context = await readTimelineContext();
+        const list = await refreshSessions();
+        const match = list.find(item => (
+            context.projectName &&
+            item.projectName === context.projectName &&
+            (!context.timelineName || item.timelineName === context.timelineName)
+        ));
+        if (match) {
+            const session = await window.sessionsAPI.get(match.id);
+            if (session) {
+                await hydrateSession(session, { needsContext: true, restartAgent: false });
+                return;
+            }
+        }
+        const active = await window.sessionsAPI.getActive?.();
+        if (active && (!context.projectName || active.projectName === context.projectName)) {
+            await hydrateSession(active, { needsContext: true, restartAgent: false });
+            return;
+        }
+        const created = await window.sessionsAPI.create(makeSessionPayload(context, seededConfig, null, []));
+        await hydrateSession(created, { needsContext: false, restartAgent: false });
+    }
+
+    async function saveCurrentSession(overrideMessages = messagesRef.current) {
+        const current = activeSessionRef.current;
+        if (!current?.id || !window.sessionsAPI) return null;
+        const patch = makeSessionPayload(current, config, current, overrideMessages);
+        const updated = await window.sessionsAPI.update(current.id, patch);
+        if (updated) {
+            activeSessionRef.current = updated;
+            setActiveSession(updated);
+            await refreshSessions();
+        }
+        return updated;
+    }
+
+    async function handleNewSession() {
+        await saveCurrentSession();
+        const context = await readTimelineContext();
+        const created = await window.sessionsAPI.create(makeSessionPayload(context, config, null, []));
+        await hydrateSession(created, { needsContext: false, restartAgent: true });
+    }
+
+    async function handleOpenSession(id) {
+        if (!id || id === activeSessionRef.current?.id) return;
+        await saveCurrentSession();
+        const session = await window.sessionsAPI.get(id);
+        if (session) await hydrateSession(session, { needsContext: true, restartAgent: true });
+    }
+
+    async function handleRenameSession(id, title) {
+        const updated = await window.sessionsAPI.update(id, { title: compactTitle(title) });
+        if (updated?.id === activeSessionRef.current?.id) {
+            activeSessionRef.current = updated;
+            setActiveSession(updated);
+        }
+        await refreshSessions();
+    }
+
+    async function handleDeleteSession(id) {
+        const result = await window.sessionsAPI.delete(id);
+        if (id === activeSessionRef.current?.id) {
+            const list = await refreshSessions();
+            const next = list.find(item => item.id === result.activeId) || list[0];
+            if (next) {
+                const session = await window.sessionsAPI.get(next.id);
+                await hydrateSession(session, { needsContext: true, restartAgent: true });
+            } else {
+                await handleNewSession();
+            }
+            return;
+        }
+        await refreshSessions();
+    }
+
     function handleSend(text, options = {}) {
         const promptText = String(text || '').trim();
         if (!promptText || isProcessing) return false;
         const displayText = options.displayText || promptText;
+        const agentPrompt = options.skipSessionContext || !restoredSessionNeedsContext.current
+            ? promptText
+            : buildSessionContinuationPrompt(promptText, activeSessionRef.current, messagesRef.current);
+        restoredSessionNeedsContext.current = false;
         setWelcomed(false);
         const userId = nextId.current++;
         const assistantId = nextId.current++;
@@ -177,7 +428,7 @@ export default function App() {
         setActiveTool(null);
         setActiveProvider(null);
         setTokenCount(0);
-        (window.agentAPI || window.claudeAPI).sendPrompt(promptText);
+        (window.agentAPI || window.claudeAPI).sendPrompt(agentPrompt);
         return true;
     }
 
@@ -221,7 +472,8 @@ export default function App() {
         ].join('\n');
         handleSend(prompt, {
             displayText: `Regenerate: ${variation}`,
-            originalPrompt
+            originalPrompt,
+            skipSessionContext: true
         });
     }
 
@@ -295,10 +547,10 @@ export default function App() {
             (window.agentAPI || window.claudeAPI).checkAuth().then(setAuthInfo);
         }
         if ((modelChanged || codexModelChanged || providerChanged) && !welcomed) {
-            setMessages([]);
             setIsProcessing(false);
             setActiveTool(null);
             setActiveProvider(null);
+            restoredSessionNeedsContext.current = messagesRef.current.length > 0;
             (window.agentAPI || window.claudeAPI).restart();
         }
     }
@@ -342,8 +594,6 @@ export default function App() {
 
     return (
         <>
-            <div className="accent-strip" />
-            <TitleBar />
             <div className={'body' + (sidebarOpen ? ' sidebar-open' : '')}>
                 {sidebarOpen && (
                     <Sidebar
@@ -354,6 +604,12 @@ export default function App() {
                         onUsePrompt={handleDraftPrompt}
                         onShowTools={() => showSidebarView('tools')}
                         onClose={closeSidebar}
+                        sessions={sessions}
+                        activeSession={activeSession}
+                        onNewSession={handleNewSession}
+                        onOpenSession={handleOpenSession}
+                        onRenameSession={handleRenameSession}
+                        onDeleteSession={handleDeleteSession}
                     />
                 )}
                 <div className="main">

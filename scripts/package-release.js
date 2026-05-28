@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, execSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
 const pluginPkg = JSON.parse(fs.readFileSync(path.join(root, 'plugin', 'package.json'), 'utf8'));
@@ -9,13 +9,41 @@ const zipName = `resolve-ai-${pluginPkg.version || 'dev'}.zip`;
 const zipPath = path.join(outDir, zipName);
 const stageDir = path.join(outDir, 'resolve-ai');
 
-function copyRecursive(source, target) {
+function ensureBuiltinTemplatePack() {
+    const dataDir = path.join(root, 'plugin', 'data');
+    const packPath = path.join(dataDir, 'builtin-template-packs.json');
+    if (fs.existsSync(packPath)) return;
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(packPath, JSON.stringify([{
+        id: 'creator-essentials',
+        name: 'Creator Essentials',
+        templates: [{
+            id: 'creator-title-card',
+            name: 'Creator Title Card',
+            title: 'Creator Title Card',
+            category: 'creator essentials',
+            tags: ['title', 'creator'],
+            prompt: 'Create a clean creator title card. 1920x1080, 25fps, ProRes 4444 overlay.',
+            html: '<!DOCTYPE html><html><body><div id="stage"><h1>Creator Title</h1></div><script>window.getAnimationDuration=()=>5;window.renderFrame=()=>{};</script></body></html>',
+            thumbnail: 'builtin://creator-title-card',
+            preview: 'builtin://creator-title-card',
+            fps: 25,
+            width: 1920,
+            height: 1080,
+            createdBy: 'Resolve AI',
+            recommendedProvider: 'auto'
+        }]
+    }], null, 2), 'utf8');
+}
+
+function copyRecursive(source, target, options = {}) {
+    const excludedDirs = options.excludedDirs || ['node_modules', '.git'];
     const stat = fs.statSync(source);
     if (stat.isDirectory()) {
         fs.mkdirSync(target, { recursive: true });
         for (const entry of fs.readdirSync(source)) {
-            if (['node_modules', 'dist', '.git'].includes(entry)) continue;
-            copyRecursive(path.join(source, entry), path.join(target, entry));
+            if (excludedDirs.includes(entry)) continue;
+            copyRecursive(path.join(source, entry), path.join(target, entry), options);
         }
         return;
     }
@@ -25,6 +53,8 @@ function copyRecursive(source, target) {
 
 fs.rmSync(stageDir, { recursive: true, force: true });
 fs.mkdirSync(stageDir, { recursive: true });
+ensureBuiltinTemplatePack();
+execSync('npm --prefix plugin run build', { cwd: root, stdio: 'inherit' });
 
 for (const item of ['plugin', 'community-templates', 'screenshots']) {
     const source = path.join(root, item);

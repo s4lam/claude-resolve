@@ -54,6 +54,58 @@ window.addEventListener('load', function() {
 });
 <\/script>`;
 
+function canvasFitScript(width, height) {
+    return `<script>
+(function(){
+  var targetWidth=${Number(width) || 1920},targetHeight=${Number(height) || 1080};
+  function numericPx(value){var n=parseFloat(value);return Number.isFinite(n)&&n>0?n:null}
+  function findSourceSize(){
+    var selectors=['#stage','.stage','#root > *','#root','.overlay','.canvas','body'];
+    for(var i=0;i<selectors.length;i++){
+      var el=document.querySelector(selectors[i]); if(!el) continue;
+      var style=getComputedStyle(el);
+      var rect=el.getBoundingClientRect();
+      var w=numericPx(style.width)||rect.width;
+      var h=numericPx(style.height)||rect.height;
+      if(w&&h&&(Math.abs(w-targetWidth)>2||Math.abs(h-targetHeight)>2)) return {width:w,height:h};
+    }
+    return null;
+  }
+  function fit(){
+    if(document.getElementById('__resolve_ai_fit_root')) return;
+    var source=findSourceSize(); if(!source) return;
+    var scale=Math.min(targetWidth/source.width,targetHeight/source.height);
+    if(!Number.isFinite(scale)||scale<=0) return;
+    var bodyStyle=getComputedStyle(document.body),htmlStyle=getComputedStyle(document.documentElement);
+    var inheritedBackground=bodyStyle.background!=='rgba(0, 0, 0, 0)'&&bodyStyle.background!=='none'?bodyStyle.background:htmlStyle.background;
+    var root=document.createElement('div');
+    root.id='__resolve_ai_fit_root';
+    root.style.position='absolute';
+    root.style.left=((targetWidth-source.width*scale)/2)+'px';
+    root.style.top=((targetHeight-source.height*scale)/2)+'px';
+    root.style.width=source.width+'px';
+    root.style.height=source.height+'px';
+    root.style.transformOrigin='top left';
+    root.style.transform='scale('+scale+')';
+    root.style.overflow='hidden';
+    root.style.background=inheritedBackground;
+    Array.prototype.slice.call(document.body.childNodes).forEach(function(child){ if(child!==root) root.appendChild(child); });
+    document.body.appendChild(root);
+    document.documentElement.style.width=targetWidth+'px';
+    document.documentElement.style.height=targetHeight+'px';
+    document.documentElement.style.margin='0';
+    document.documentElement.style.overflow='hidden';
+    document.body.style.width=targetWidth+'px';
+    document.body.style.height=targetHeight+'px';
+    document.body.style.margin='0';
+    document.body.style.overflow='hidden';
+    document.body.style.background='transparent';
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',fit); else fit();
+})();
+<\/script>`;
+}
+
 const REPLAY_BUFFER_MS = 500;
 
 function numericDimension(value, fallback) {
@@ -173,8 +225,9 @@ const HTMLPreview = memo(function HTMLPreview({ parsed, selectedAssetIds, width 
         if (parsed.mode !== 'realtime') {
             html = injectBeforeBodyClose(html, FRAME_PLAY_SCRIPT);
         }
+        html = injectBeforeBodyClose(html, canvasFitScript(canvasWidth, canvasHeight));
         return html;
-    }, [parsed, resolvedHtml, bundle]);
+    }, [parsed, resolvedHtml, bundle, canvasWidth, canvasHeight]);
 
     function togglePlay() {
         const next = !isPlaying;

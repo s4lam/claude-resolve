@@ -207,6 +207,15 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
         setTimeout(() => setTimelineStatus(''), 2400);
     }
 
+    function updateRenderSetting(patch) {
+        onConfigChange({
+            render: {
+                ...(config.render || {}),
+                ...patch
+            }
+        });
+    }
+
     const provider = config.provider || 'auto';
     const modelValue = provider === 'codex' ? (config.codexModel || 'default') : (config.model || 'sonnet');
     const activeProvider = health?.activeProvider || provider;
@@ -214,6 +223,17 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
     const versionText = update?.current ? `v${update.current}` : 'Resolve AI';
     const timelineText = timelineStatus || `${config.width}×${config.height} / ${config.fps}fps`;
     const activeProviderStatus = health?.providers?.[activeProvider]?.status || health?.providers?.[provider]?.status || 'unknown';
+    const renderSettings = {
+        proresProfile: '4444',
+        threads: 'auto',
+        createProxy: false,
+        proxyEncoder: 'auto',
+        proxyQuality: 'balanced',
+        ...(config.render || {})
+    };
+    const renderMeta = renderSettings.createProxy
+        ? `${renderSettings.proxyEncoder === 'auto' ? 'auto proxy' : renderSettings.proxyEncoder}`
+        : 'ProRes alpha';
     const brandFilledCount = useMemo(() => {
         return ['colors', 'fonts', 'tone', 'logoPath', 'phrases'].filter(key => String(brandKit[key] || '').trim()).length;
     }, [brandKit]);
@@ -308,6 +328,72 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
                     <button className="settings-wide-action" onClick={handleUseTimelineSettings}>
                         Use current timeline settings
                     </button>
+                </SettingsSection>
+
+                <SettingsSection title="Render" meta={renderMeta} defaultOpen={false}>
+                    <div className="render-settings-note">
+                        Final timeline output stays ProRes 4444 with alpha. NVENC and other hardware encoders are used only for optional MP4 preview/proxy copies because they do not preserve ProRes alpha.
+                    </div>
+                    <SettingRow label="ProRes profile" help="4444 is smaller. 4444 XQ is heavier and slower.">
+                        <select
+                            className="select"
+                            value={renderSettings.proresProfile}
+                            onChange={e => updateRenderSetting({ proresProfile: e.target.value })}
+                        >
+                            <option value="4444">ProRes 4444</option>
+                            <option value="4444xq">ProRes 4444 XQ</option>
+                        </select>
+                    </SettingRow>
+                    <SettingRow label="FFmpeg threads" help="Auto is safest. Limit threads if Resolve feels sluggish while rendering.">
+                        <select
+                            className="select"
+                            value={renderSettings.threads}
+                            onChange={e => updateRenderSetting({ threads: e.target.value })}
+                        >
+                            <option value="auto">Auto</option>
+                            <option value="2">2 threads</option>
+                            <option value="4">4 threads</option>
+                            <option value="8">8 threads</option>
+                            <option value="12">12 threads</option>
+                            <option value="16">16 threads</option>
+                        </select>
+                    </SettingRow>
+                    <SettingRow label="MP4 proxy" help="Optional fast preview copy beside the .mov. The .mov is still imported to Resolve.">
+                        <label className="settings-toggle">
+                            <input
+                                type="checkbox"
+                                checked={!!renderSettings.createProxy}
+                                onChange={e => updateRenderSetting({ createProxy: e.target.checked })}
+                            />
+                            <span>{renderSettings.createProxy ? 'Create proxy' : 'Off'}</span>
+                        </label>
+                    </SettingRow>
+                    <SettingRow label="Proxy encoder" help="Use NVENC on NVIDIA GPUs, VideoToolbox on Apple Silicon, or software fallback.">
+                        <select
+                            className="select"
+                            value={renderSettings.proxyEncoder}
+                            onChange={e => updateRenderSetting({ proxyEncoder: e.target.value })}
+                            disabled={!renderSettings.createProxy}
+                        >
+                            <option value="auto">Auto hardware</option>
+                            <option value="h264_nvenc">NVIDIA NVENC H.264</option>
+                            <option value="h264_videotoolbox">Apple VideoToolbox H.264</option>
+                            <option value="h264_qsv">Intel Quick Sync H.264</option>
+                            <option value="libx264">Software H.264</option>
+                        </select>
+                    </SettingRow>
+                    <SettingRow label="Proxy quality" help="Small is faster/lighter. High is larger.">
+                        <select
+                            className="select"
+                            value={renderSettings.proxyQuality}
+                            onChange={e => updateRenderSetting({ proxyQuality: e.target.value })}
+                            disabled={!renderSettings.createProxy}
+                        >
+                            <option value="small">Small / fastest</option>
+                            <option value="balanced">Balanced</option>
+                            <option value="high">High quality</option>
+                        </select>
+                    </SettingRow>
                 </SettingsSection>
 
                 <SettingsSection title="Brand Kit" meta={`${brandFilledCount}/5 fields`} defaultOpen={false}>

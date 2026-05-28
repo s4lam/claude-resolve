@@ -19,6 +19,7 @@ const { setupPreviewHandlers } = require('./ipc/preview');
 const { setupTimelineHandlers } = require('./ipc/timeline');
 const { setupVariationHandlers } = require('./ipc/variations');
 const { setupDebugHandlers } = require('./ipc/debug');
+const { setupSessionHandlers } = require('./ipc/sessions');
 
 let mainWindow = null;
 
@@ -27,6 +28,9 @@ function createWindow() {
         width: 500,
         height: 700,
         alwaysOnTop: true,
+        frame: false,
+        titleBarStyle: 'hidden',
+        autoHideMenuBar: true,
         useContentSize: true,
         icon: path.join(__dirname, 'src', 'assets', 'favicon.png'),
         webPreferences: {
@@ -51,13 +55,14 @@ app.whenReady().then(async () => {
     setupTemplateHandlers(ipcMain);
     setupAssetHandlers(ipcMain);
     setupTemplatePackHandlers(ipcMain);
-setupCaptionHandlers(ipcMain);
-setupShowcaseHandlers(ipcMain);
-setupUpdateHandlers(ipcMain);
-setupPreviewHandlers(ipcMain);
-setupTimelineHandlers(ipcMain);
-setupVariationHandlers(ipcMain);
-setupDebugHandlers(ipcMain);
+    setupCaptionHandlers(ipcMain);
+    setupShowcaseHandlers(ipcMain);
+    setupUpdateHandlers(ipcMain);
+    setupPreviewHandlers(ipcMain);
+    setupTimelineHandlers(ipcMain);
+    setupVariationHandlers(ipcMain);
+    setupDebugHandlers(ipcMain);
+    setupSessionHandlers(ipcMain);
     ipcMain.handle('window:resize', (_event, { width, height }) => {
         mainWindow.setSize(width, height);
     });

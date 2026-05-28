@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 const { getResolve, getCurrentProject } = require('./resolve');
 const { readConfig } = require('./config');
 const { validateOverlayHtml } = require('./render-validation');
+const { normalizeRenderSettings, proxyPathFor } = require('./render-settings');
 const { resolveAssetReferences } = require('./assets');
 const { createRenderQueue } = require('./render-queue');
 const {
@@ -165,11 +166,12 @@ async function importToTimeline(movPath) {
     }]);
 }
 
-async function handleRenderMov(_event, { html, name, fps, width, height, metadata }) {
+async function handleRenderMov(_event, { html, name, fps, width, height, renderSettings, metadata }) {
     const cfg = readConfig();
     fps = fps || cfg.fps;
     width = width || cfg.width;
     height = height || cfg.height;
+    const normalizedRender = normalizeRenderSettings({ ...(cfg.render || {}), ...(renderSettings || {}) });
     html = resolveAssetReferences(html, metadata?.selectedAssetIds || cfg.selectedAssetIds || []);
     const tempDir = path.join(os.tmpdir(), 'claude_resolve_' + Date.now());
     fs.mkdirSync(tempDir, { recursive: true });
@@ -177,6 +179,7 @@ async function handleRenderMov(_event, { html, name, fps, width, height, metadat
 
     const htmlPath = path.join(tempDir, 'overlay.html');
     const movPath = path.join(RENDER_DIR, renderFilename(name));
+    const proxyPath = normalizedRender.createProxy ? proxyPathFor(movPath) : null;
     const movName = path.basename(movPath);
     fs.writeFileSync(htmlPath, html);
 
@@ -198,7 +201,14 @@ async function handleRenderMov(_event, { html, name, fps, width, height, metadat
             '--width', String(width),
             '--height', String(height),
             '--output', movPath,
-            '--ffmpeg', FFMPEG_PATH
+            '--ffmpeg', FFMPEG_PATH,
+            '--prores-profile', normalizedRender.proresProfile,
+            '--ffmpeg-threads', normalizedRender.threads,
+            ...(proxyPath ? [
+                '--proxy-output', proxyPath,
+                '--proxy-encoder', normalizedRender.proxyEncoder,
+                '--proxy-quality', normalizedRender.proxyQuality
+            ] : [])
         ], { env: { ...ENV, ELECTRON_RUN_AS_NODE: '1' } });
         const queueId = metadata?.renderQueueId;
         if (queueId) activeRenderProcesses.set(queueId, proc);
@@ -240,6 +250,8 @@ async function handleRenderMov(_event, { html, name, fps, width, height, metadat
                 fps,
                 width,
                 height,
+                renderSettings: normalizedRender,
+                proxyPath: proxyPath && fs.existsSync(proxyPath) ? proxyPath : null,
                 size: fs.existsSync(movPath) ? fs.statSync(movPath).size : null,
                 createdAt: metadata?.createdAt || new Date().toISOString()
             });

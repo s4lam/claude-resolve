@@ -71,7 +71,7 @@ Codex auth is handled only by the Codex CLI (`codex login` / `codex login status
 3. Click a Prompt Gallery item or type a prompt
 4. Preview the generated motion graphic
 5. Click **Render .mov** to import a ProRes 4444 overlay at the playhead
-6. Use **Timeline tools**, **Regenerate**, **Fix with AI**, **Save as Template**, or render history to iterate
+6. Use **Sessions**, **Timeline tools**, **Regenerate**, **Fix with AI**, **Save as Template**, or render history to iterate
 
 ### Prompt → Render Examples
 
@@ -92,12 +92,14 @@ Each render can also write local sidecar metadata beside the .mov so the history
 ## Growth Features
 
 - **Prompt Gallery**: built-in creator, podcast, gaming, product, documentary, business, social, event, sports, and music prompts.
+- **Project sessions**: local chat history per project/timeline, with saved generated cards and quick switching between sessions.
 - **Timeline tools**: generate titles, lower thirds, transitions, marker-based graphics, and re-renders with current timeline context.
 - **Create workflow**: choose motion type, duration, background mode, aspect ratio, social safe-area intent, style intensity, and review the generation brief before sending.
 - **Template Packs**: local JSON packs that contributors can submit and users can import from disk or GitHub raw URLs.
 - **Captions**: local SRT/VTT import, pasted transcript parsing, preview cues, and clean/kinetic/karaoke/social/podcast styles.
 - **Asset-aware generation**: drag/drop images, inspect asset health, attach logos/products/textures/reference images, build a selected-asset reference board, and extract brand colors.
 - **Variation previews**: draft multiple prompt variations with locks for logo, colors, layout, and animation-only changes.
+- **Render settings**: choose ProRes 4444/4444 XQ, FFmpeg thread limits, and optional MP4 proxy copies using NVENC, VideoToolbox, Quick Sync, or software H.264.
 - **Fix with AI**: send render failures back to the active provider for repair.
 - **Showcase builder**: export a static local showcase page from saved templates/prompts.
 
@@ -112,6 +114,8 @@ Open the sidebar (gear icon) to configure:
 - **Provider Health**: installed/login/version status for Claude and Codex, plus a collapsible raw log drawer for troubleshooting
 - **Brand Kit**: local colors, fonts, logo path, tone, and common phrases injected into new generations
 - **Timeline**: quick actions that use current timeline FPS, resolution, playhead, and duration when Resolve exposes them
+- **Render**: ProRes profile, FFmpeg threads, and optional hardware-encoded MP4 proxy settings. Final alpha `.mov` output stays ProRes 4444 for Resolve compatibility.
+- **Sessions**: create, reopen, rename, search, and delete local project chat sessions
 - **Asset Library**: drag/drop local PNG/JPG/WebP/SVG/GIF assets, inspect dimensions/health, attach selected assets to new prompts, and provide notes so the AI uses them correctly
 - **Variations**: generate multiple prompt directions and lock logo/colors/layout/animation behavior
 - **Gallery**: search, category filters, favorites, recents, local import, and GitHub raw URL installs
@@ -139,6 +143,11 @@ The plugin ships with a curated set of fonts so generated animations look consis
 - This is a beta — expect rough edges; please report issues on GitHub or Discord
 
 Tested on Windows and macOS (Apple Silicon).
+
+## Troubleshooting
+
+- If installation verification reports `missing: dist/index.html`, download the latest release ZIP or run `npm --prefix plugin run build` before installing.
+- If verification reports `missing: data/builtin-template-packs.json`, download the latest release ZIP and rerun the installer. Current installers recreate that starter pack automatically.
 
 ## Links
 

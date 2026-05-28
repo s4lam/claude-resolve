@@ -365,6 +365,40 @@ if (-not (Test-Path $distIndex)) {
     Ok 'Plugin UI bundle present.'
 }
 
+$templatePackPath = Join-Path $PluginSrc 'data\builtin-template-packs.json'
+if (-not (Test-Path $templatePackPath)) {
+    Warn 'Built-in template packs missing - creating starter pack...'
+    $templateDir = Split-Path -Parent $templatePackPath
+    New-Item -ItemType Directory -Path $templateDir -Force | Out-Null
+@'
+[
+  {
+    "id": "creator-essentials",
+    "name": "Creator Essentials",
+    "templates": [
+      {
+        "id": "creator-title-card",
+        "name": "Creator Title Card",
+        "title": "Creator Title Card",
+        "category": "creator",
+        "tags": ["title", "intro"],
+        "prompt": "Create a bold 5 second creator title card with clean motion and a polished final hold.",
+        "html": "<!DOCTYPE html><html><body><div id=\"stage\"><h1>Creator Title</h1></div><script>window.getAnimationDuration=()=>5;window.renderFrame=()=>{};</script></body></html>",
+        "thumbnail": "builtin://creator-title-card",
+        "preview": "builtin://creator-title-card",
+        "fps": 25,
+        "width": 1920,
+        "height": 1080,
+        "createdBy": "Resolve AI",
+        "recommendedProvider": "auto"
+      }
+    ]
+  }
+]
+'@ | Set-Content -Path $templatePackPath -Encoding UTF8
+}
+Ok 'Built-in template packs present.'
+
 # 5 - Chromium
 Step 5 'Downloading Playwright Chromium'
 Push-Location $RendererSrc

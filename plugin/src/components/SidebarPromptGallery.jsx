@@ -128,30 +128,31 @@ export default function SidebarPromptGallery({ config, onConfigChange, onPrompt 
                 <span className="sb-actions">
                     {status && <span className="sync-status">{status}</span>}
                     <button className="sync" onClick={handleImportPack}>Import</button>
-                    <button className="sync" onClick={handleBuildShowcase}>Showcase</button>
+                    <button className="sync" onClick={handleBuildShowcase}>Page</button>
                 </span>
             </div>
-            <input className="sb-search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search gallery" />
-            <div className="gallery-filter-strip" role="tablist" aria-label="Gallery filters">
-                {categories.map(cat => (
-                    <button
-                        type="button"
-                        key={cat}
-                        className={'gallery-filter' + (category === cat ? ' active' : '')}
-                        aria-selected={category === cat}
-                        onClick={() => setCategory(cat)}
-                    >
-                        {cat === 'all' ? 'All' : cat === 'favorites' ? 'Favorites' : cat === 'recent' ? 'Recent' : cat}
-                    </button>
-                ))}
-            </div>
-            <div className="gallery-url-import">
-                <input
-                    value={packUrl}
-                    onChange={e => setPackUrl(e.target.value)}
-                    placeholder="GitHub raw template-pack.json URL"
-                />
-                <button className="mini-action" disabled={!packUrl.trim()} onClick={handleInstallFromUrl}>Install URL</button>
+            <div className="gallery-controls">
+                <input className="sb-search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search gallery" />
+                <select
+                    className="gallery-category-select"
+                    value={category}
+                    onChange={e => setCategory(e.target.value)}
+                    aria-label="Gallery category"
+                >
+                    {categories.map(cat => (
+                        <option value={cat} key={cat}>
+                            {cat === 'all' ? 'All prompts' : cat === 'favorites' ? 'Favorites' : cat === 'recent' ? 'Recent' : cat}
+                        </option>
+                    ))}
+                </select>
+                <div className="gallery-url-import">
+                    <input
+                        value={packUrl}
+                        onChange={e => setPackUrl(e.target.value)}
+                        placeholder="GitHub raw template-pack.json URL"
+                    />
+                    <button className="mini-action" disabled={!packUrl.trim()} onClick={handleInstallFromUrl}>Install</button>
+                </div>
             </div>
             <div className="gallery-list">
                 {filtered.map(item => (

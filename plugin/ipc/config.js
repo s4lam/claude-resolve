@@ -37,6 +37,13 @@ const DEFAULTS = {
     assets: {
         maxImportSizeMb: 25
     },
+    render: {
+        proresProfile: '4444',
+        threads: 'auto',
+        createProxy: false,
+        proxyEncoder: 'auto',
+        proxyQuality: 'balanced'
+    },
     ui: {
         rawLogsOpen: false,
         activeToolTab: 'create'
@@ -63,6 +70,7 @@ function mergeConfig(parsed = {}) {
         },
         captions: { ...(DEFAULTS.captions || {}), ...(parsed.captions || {}) },
         assets: { ...(DEFAULTS.assets || {}), ...(parsed.assets || {}) },
+        render: { ...(DEFAULTS.render || {}), ...(parsed.render || {}) },
         ui: { ...(DEFAULTS.ui || {}), ...(parsed.ui || {}) },
         gallery: {
             ...(DEFAULTS.gallery || {}),
@@ -98,6 +106,7 @@ function writeConfig(partial) {
         },
         captions: { ...(current.captions || DEFAULTS.captions), ...(partial.captions || {}) },
         assets: { ...(current.assets || DEFAULTS.assets), ...(partial.assets || {}) },
+        render: { ...(current.render || DEFAULTS.render), ...(partial.render || {}) },
         ui: { ...(current.ui || {}), ...(partial.ui || {}) },
         gallery: {
             ...(current.gallery || DEFAULTS.gallery),

@@ -4,12 +4,14 @@ import SidebarAssets from './SidebarAssets';
 import SidebarCaptions from './SidebarCaptions';
 import SidebarPromptGallery from './SidebarPromptGallery';
 import SidebarSettings from './SidebarSettings';
+import SidebarSessions from './SidebarSessions';
 import SidebarTemplates from './SidebarTemplates';
 import SidebarCreate from './SidebarCreate';
 import SidebarTimeline from './SidebarTimeline';
 import SidebarVariations from './SidebarVariations';
 
 const TOOL_TABS = [
+    ['sessions', 'Sessions'],
     ['create', 'Create'],
     ['timeline', 'Timeline'],
     ['assets', 'Assets'],
@@ -20,7 +22,21 @@ const TOOL_TABS = [
     ['renders', 'Renders'],
 ];
 
-export default function Sidebar({ view = 'tools', config, onConfigChange, onPrompt, onUsePrompt, onShowTools, onClose }) {
+export default function Sidebar({
+    view = 'tools',
+    config,
+    onConfigChange,
+    onPrompt,
+    onUsePrompt,
+    onShowTools,
+    onClose,
+    sessions,
+    activeSession,
+    onNewSession,
+    onOpenSession,
+    onRenameSession,
+    onDeleteSession
+}) {
     const [activeTool, setActiveTool] = useState(config?.ui?.activeToolTab || 'create');
 
     if (view === 'settings') {
@@ -37,6 +53,18 @@ export default function Sidebar({ view = 'tools', config, onConfigChange, onProm
     }
 
     function renderActiveTool() {
+        if (activeTool === 'sessions') {
+            return (
+                <SidebarSessions
+                    sessions={sessions}
+                    activeSession={activeSession}
+                    onNewSession={onNewSession}
+                    onOpenSession={onOpenSession}
+                    onRenameSession={onRenameSession}
+                    onDeleteSession={onDeleteSession}
+                />
+            );
+        }
         if (activeTool === 'create') return <SidebarCreate config={config} onPrompt={onPrompt} />;
         if (activeTool === 'timeline') return <SidebarTimeline config={config} onPrompt={onUsePrompt || onPrompt} />;
         if (activeTool === 'variations') return <SidebarVariations config={config} onConfigChange={onConfigChange} onPrompt={onPrompt} onUsePrompt={onUsePrompt || onPrompt} />;

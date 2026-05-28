@@ -87,6 +87,16 @@ contextBridge.exposeInMainWorld('templateAPI', {
     use: (id) => ipcRenderer.invoke('templates:use', id)
 });
 
+contextBridge.exposeInMainWorld('sessionsAPI', {
+    list: (options) => ipcRenderer.invoke('sessions:list', options),
+    get: (id) => ipcRenderer.invoke('sessions:get', id),
+    create: (payload) => ipcRenderer.invoke('sessions:create', payload),
+    update: (id, patch) => ipcRenderer.invoke('sessions:update', id, patch),
+    delete: (id) => ipcRenderer.invoke('sessions:delete', id),
+    setActive: (id) => ipcRenderer.invoke('sessions:setActive', id),
+    getActive: () => ipcRenderer.invoke('sessions:getActive')
+});
+
 contextBridge.exposeInMainWorld('assetAPI', {
     list: () => ipcRenderer.invoke('assets:list'),
     add: (payload) => ipcRenderer.invoke('assets:add', payload),

@@ -44,12 +44,14 @@ function RenderMovAction({ parsed, message, config, provider, model, validation,
                 fps: config.fps,
                 width: config.width,
                 height: config.height,
+                renderSettings: config.render || {},
                 metadata: {
                     prompt: message.prompt,
                     provider,
                     model,
                     renderQueueId: queueJob?.id || null,
                     selectedAssetIds: config.selectedAssetIds || [],
+                    renderSettings: config.render || {},
                     validationWarnings: validation?.warnings || []
                 }
             });

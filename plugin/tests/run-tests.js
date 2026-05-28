@@ -8,6 +8,7 @@ require('./agent-health.test');
 require('./agent-logs.test');
 require('./config.test');
 require('./render-validation.test');
+require('./render-settings.test');
 require('./repair.test');
 require('./showcase.test');
 require('./templates.test');
@@ -16,5 +17,6 @@ require('./template-packs-url.test');
 require('./timeline.test');
 require('./variations.test');
 require('./render-queue.test');
+require('./sessions.test');
 
 console.log('all tests passed');

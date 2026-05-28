@@ -33,7 +33,6 @@
     --bg-2:            #1F1F22;
     --bg-3:            #26262A;
     --bg-4:            #303035;
-    --bg-titlebar:     #1E1E21;   /* titlebar gradient start */
     --bg-card-head:    #1E1E22;   /* render card header */
     --bg-sunken:       #16161a;   /* settings / card foot */
     --bg-composer-end: #161618;   /* composer gradient end */
@@ -73,7 +72,6 @@
 
     /* ───────────── Gradients ───────────── */
     --gradient:            linear-gradient(135deg, var(--warm-200) 0%, var(--mid) 35%, var(--cool-200) 65%, var(--cool-300) 100%);
-    --gradient-titlebar:   linear-gradient(180deg, var(--bg-titlebar), var(--bg-1));
     --gradient-composer:   linear-gradient(180deg, var(--bg-1), var(--bg-composer-end));
     --gradient-chip-hover: linear-gradient(180deg, var(--bg-chip-hi) 0%, var(--bg-chip-lo) 100%);
     --gradient-preview:    linear-gradient(180deg, var(--bg-deep), var(--bg-preview));

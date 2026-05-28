@@ -268,6 +268,40 @@ else
     ok 'Plugin UI bundle present.'
 fi
 
+if [ ! -f "$PLUGIN_SRC/data/builtin-template-packs.json" ]; then
+    warn 'Built-in template packs missing - creating starter pack...'
+    if ! mkdir -p "$PLUGIN_SRC/data"; then
+        fail 'Could not create plugin/data for built-in template packs.'
+    fi
+    cat > "$PLUGIN_SRC/data/builtin-template-packs.json" <<'JSON'
+[
+  {
+    "id": "creator-essentials",
+    "name": "Creator Essentials",
+    "templates": [
+      {
+        "id": "creator-title-card",
+        "name": "Creator Title Card",
+        "title": "Creator Title Card",
+        "category": "creator",
+        "tags": ["title", "intro"],
+        "prompt": "Create a bold 5 second creator title card with clean motion and a polished final hold.",
+        "html": "<!DOCTYPE html><html><body><div id=\"stage\"><h1>Creator Title</h1></div><script>window.getAnimationDuration=()=>5;window.renderFrame=()=>{};</script></body></html>",
+        "thumbnail": "builtin://creator-title-card",
+        "preview": "builtin://creator-title-card",
+        "fps": 25,
+        "width": 1920,
+        "height": 1080,
+        "createdBy": "Resolve AI",
+        "recommendedProvider": "auto"
+      }
+    ]
+  }
+]
+JSON
+fi
+ok 'Built-in template packs present.'
+
 # 5 - Chromium
 step 5 'Downloading Playwright Chromium'
 if ! ( cd "$RENDERER_SRC" && npx --yes playwright install chromium ); then

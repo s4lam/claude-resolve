@@ -160,6 +160,71 @@ async function detectMode(page) {
     return hasRenderFrame ? 'frame' : 'realtime-precise';
 }
 
+async function fitPageToViewport(page, args) {
+    await page.evaluate(({ targetWidth, targetHeight }) => {
+        function numericPx(value) {
+            const n = parseFloat(value);
+            return Number.isFinite(n) && n > 0 ? n : null;
+        }
+
+        function findSourceSize() {
+            const selectors = ['#stage', '.stage', '#root > *', '#root', '.overlay', '.canvas', 'body'];
+            for (const selector of selectors) {
+                const el = document.querySelector(selector);
+                if (!el) continue;
+                const style = getComputedStyle(el);
+                const width = numericPx(style.width) || el.getBoundingClientRect().width;
+                const height = numericPx(style.height) || el.getBoundingClientRect().height;
+                if (width && height && (Math.abs(width - targetWidth) > 2 || Math.abs(height - targetHeight) > 2)) {
+                    return { width, height };
+                }
+            }
+            return null;
+        }
+
+        if (document.getElementById('__resolve_ai_fit_root')) return;
+        const source = findSourceSize();
+        if (!source) return;
+
+        const scale = Math.min(targetWidth / source.width, targetHeight / source.height);
+        if (!Number.isFinite(scale) || scale <= 0) return;
+
+        const bodyStyle = getComputedStyle(document.body);
+        const htmlStyle = getComputedStyle(document.documentElement);
+        const inheritedBackground = bodyStyle.background !== 'rgba(0, 0, 0, 0)' && bodyStyle.background !== 'none'
+            ? bodyStyle.background
+            : htmlStyle.background;
+
+        const root = document.createElement('div');
+        root.id = '__resolve_ai_fit_root';
+        root.style.position = 'absolute';
+        root.style.left = `${(targetWidth - source.width * scale) / 2}px`;
+        root.style.top = `${(targetHeight - source.height * scale) / 2}px`;
+        root.style.width = `${source.width}px`;
+        root.style.height = `${source.height}px`;
+        root.style.transformOrigin = 'top left';
+        root.style.transform = `scale(${scale})`;
+        root.style.overflow = 'hidden';
+        root.style.background = inheritedBackground;
+
+        const children = Array.from(document.body.childNodes);
+        children.forEach(child => {
+            if (child !== root) root.appendChild(child);
+        });
+        document.body.appendChild(root);
+
+        document.documentElement.style.width = `${targetWidth}px`;
+        document.documentElement.style.height = `${targetHeight}px`;
+        document.documentElement.style.margin = '0';
+        document.documentElement.style.overflow = 'hidden';
+        document.body.style.width = `${targetWidth}px`;
+        document.body.style.height = `${targetHeight}px`;
+        document.body.style.margin = '0';
+        document.body.style.overflow = 'hidden';
+        document.body.style.background = 'transparent';
+    }, { targetWidth: args.width, targetHeight: args.height });
+}
+
 async function renderFrameMode(page, args, framesDir, totalFrames) {
     for (let frame = 0; frame < totalFrames; frame++) {
         await page.evaluate(`window.renderFrame(${frame}, ${args.fps})`);
@@ -203,7 +268,19 @@ async function renderRealtimePreciseMode(page, args, framesDir, totalFrames) {
 }
 
 function parseArgs(argv) {
-    const args = { fps: 25, width: 1920, height: 1080, output: null, ffmpeg: 'ffmpeg', htmlPath: null };
+    const args = {
+        fps: 25,
+        width: 1920,
+        height: 1080,
+        output: null,
+        ffmpeg: 'ffmpeg',
+        htmlPath: null,
+        proresProfile: '4444',
+        ffmpegThreads: 'auto',
+        proxyOutput: null,
+        proxyEncoder: 'auto',
+        proxyQuality: 'balanced'
+    };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--fps') args.fps = parseInt(argv[++i], 10);
@@ -211,9 +288,62 @@ function parseArgs(argv) {
         else if (a === '--height') args.height = parseInt(argv[++i], 10);
         else if (a === '--output') args.output = argv[++i];
         else if (a === '--ffmpeg') args.ffmpeg = argv[++i];
+        else if (a === '--prores-profile') args.proresProfile = String(argv[++i] || '4444').toLowerCase();
+        else if (a === '--ffmpeg-threads') args.ffmpegThreads = String(argv[++i] || 'auto');
+        else if (a === '--proxy-output') args.proxyOutput = argv[++i];
+        else if (a === '--proxy-encoder') args.proxyEncoder = String(argv[++i] || 'auto');
+        else if (a === '--proxy-quality') args.proxyQuality = String(argv[++i] || 'balanced');
         else if (!args.htmlPath) args.htmlPath = a;
     }
     return args;
+}
+
+function normalizedThreads(value) {
+    const raw = String(value || 'auto').toLowerCase();
+    if (raw === 'auto') return null;
+    const threads = Math.floor(Number(raw));
+    return Number.isFinite(threads) && threads > 0 ? String(Math.min(32, threads)) : null;
+}
+
+function proresProfileValue(value) {
+    return String(value || '').toLowerCase() === '4444xq' ? '4444xq' : '4444';
+}
+
+function platformDefaultProxyEncoder() {
+    if (process.platform === 'darwin') return 'h264_videotoolbox';
+    if (process.platform === 'win32' || process.platform === 'linux') return 'h264_nvenc';
+    return 'libx264';
+}
+
+function proxyEncoderValue(value) {
+    if (value === 'auto') return platformDefaultProxyEncoder();
+    if (['h264_nvenc', 'h264_videotoolbox', 'h264_qsv', 'libx264'].includes(value)) return value;
+    return 'libx264';
+}
+
+function proxyQualityArgs(encoder, quality) {
+    const q = ['small', 'balanced', 'high'].includes(quality) ? quality : 'balanced';
+    if (encoder === 'h264_nvenc') {
+        return q === 'high' ? ['-preset', 'p5', '-cq', '18'] : q === 'small' ? ['-preset', 'p4', '-cq', '28'] : ['-preset', 'p4', '-cq', '23'];
+    }
+    if (encoder === 'h264_videotoolbox') {
+        return q === 'high' ? ['-b:v', '18M'] : q === 'small' ? ['-b:v', '5M'] : ['-b:v', '10M'];
+    }
+    if (encoder === 'h264_qsv') {
+        return q === 'high' ? ['-global_quality', '18'] : q === 'small' ? ['-global_quality', '28'] : ['-global_quality', '23'];
+    }
+    return q === 'high' ? ['-preset', 'fast', '-crf', '16'] : q === 'small' ? ['-preset', 'veryfast', '-crf', '28'] : ['-preset', 'veryfast', '-crf', '22'];
+}
+
+function runFfmpeg(ffmpeg, ffmpegArgs, failurePrefix) {
+    const result = spawnSync(ffmpeg, ffmpegArgs, { encoding: 'utf-8' });
+    if (result.error) {
+        return { ok: false, error: `${failurePrefix} failed to spawn: ${result.error.message}` };
+    }
+    if (result.status !== 0) {
+        return { ok: false, error: `${failurePrefix} failed: ${(result.stderr || '').slice(0, 500)}` };
+    }
+    return { ok: true };
 }
 
 async function main() {
@@ -263,6 +393,7 @@ async function main() {
 
         // Extra settle for font decode + initial paint
         await page.waitForTimeout(200);
+        await fitPageToViewport(page, args);
 
         let duration = await page.evaluate('window.getAnimationDuration()');
         if (typeof duration !== 'number' || !isFinite(duration) || duration <= 0) {
@@ -315,27 +446,45 @@ async function main() {
 
         await browser.close();
 
+        const threads = normalizedThreads(args.ffmpegThreads);
         const ffmpegArgs = [
             '-y',
             '-framerate', String(args.fps),
             '-i', path.join(framesDir, 'frame_%06d.png'),
             '-c:v', 'prores_ks',
-            '-profile:v', '4444',
+            '-profile:v', proresProfileValue(args.proresProfile),
             '-pix_fmt', 'yuva444p10le',
             '-vendor', 'apl0',
+            ...(threads ? ['-threads', threads] : []),
             args.output,
         ];
 
         emit({ type: 'encoding' });
-        const result = spawnSync(args.ffmpeg, ffmpegArgs, { encoding: 'utf-8' });
-
-        if (result.error) {
-            emit({ type: 'error', message: `FFmpeg failed to spawn: ${result.error.message}` });
+        const result = runFfmpeg(args.ffmpeg, ffmpegArgs, 'FFmpeg');
+        if (!result.ok) {
+            emit({ type: 'error', message: result.error });
             process.exit(1);
         }
-        if (result.status !== 0) {
-            emit({ type: 'error', message: `FFmpeg failed: ${(result.stderr || '').slice(0, 500)}` });
-            process.exit(1);
+
+        if (args.proxyOutput) {
+            const proxyEncoder = proxyEncoderValue(args.proxyEncoder);
+            const proxyArgs = [
+                '-y',
+                '-framerate', String(args.fps),
+                '-i', path.join(framesDir, 'frame_%06d.png'),
+                '-vf', 'format=yuv420p',
+                '-c:v', proxyEncoder,
+                ...proxyQualityArgs(proxyEncoder, args.proxyQuality),
+                ...(threads ? ['-threads', threads] : []),
+                '-movflags', '+faststart',
+                args.proxyOutput
+            ];
+            const proxyResult = runFfmpeg(args.ffmpeg, proxyArgs, 'Proxy FFmpeg');
+            if (proxyResult.ok) {
+                emit({ type: 'proxy_done', output: args.proxyOutput, encoder: proxyEncoder });
+            } else {
+                emit({ type: 'warning', message: proxyResult.error });
+            }
         }
 
         emit({ type: 'done', output: args.output });
