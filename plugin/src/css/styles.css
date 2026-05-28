@@ -2475,9 +2475,13 @@ body, #root {
     background: var(--gradient-preview);
 }
 .card-preview-frame {
+    position: absolute;
+    left: 50%;
+    top: 50%;
     border: 0;
     display: block;
-    transform-origin: top left;
+    transform-origin: center center;
+    background: transparent;
 }
 .card-play {
     position: absolute;

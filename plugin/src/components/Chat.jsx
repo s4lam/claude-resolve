@@ -166,7 +166,12 @@ function RenderCard({ message, parsed, config, provider, model, onRegenerate, on
                     </span>
                 </span>
             </div>
-            <Preview parsed={parsed} selectedAssetIds={config.selectedAssetIds || []} />
+            <Preview
+                parsed={parsed}
+                selectedAssetIds={config.selectedAssetIds || []}
+                width={config.width}
+                height={config.height}
+            />
             {compatibility && (
                 <div className={'compat-summary ' + compatibility.status}>
                     <div>

@@ -56,7 +56,12 @@ window.addEventListener('load', function() {
 
 const REPLAY_BUFFER_MS = 500;
 
-const HTMLPreview = memo(function HTMLPreview({ parsed, selectedAssetIds }) {
+function numericDimension(value, fallback) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const HTMLPreview = memo(function HTMLPreview({ parsed, selectedAssetIds, width = 1920, height = 1080 }) {
     const iframeRef = useRef(null);
     const containerRef = useRef(null);
     const [scale, setScale] = useState(1);
@@ -67,6 +72,8 @@ const HTMLPreview = memo(function HTMLPreview({ parsed, selectedAssetIds }) {
     const [isVisible, setIsVisible] = useState(true);
     const [resolvedHtml, setResolvedHtml] = useState(parsed.html);
     const wasOffscreenRef = useRef(false);
+    const canvasWidth = numericDimension(width, 1920);
+    const canvasHeight = numericDimension(height, 1080);
 
     useEffect(() => {
         if (!bundle) loadBundle().then(setBundle);
@@ -93,14 +100,16 @@ const HTMLPreview = memo(function HTMLPreview({ parsed, selectedAssetIds }) {
     useEffect(() => {
         function updateScale() {
             if (containerRef.current) {
-                setScale(containerRef.current.clientWidth / 1920);
+                const box = containerRef.current.getBoundingClientRect();
+                const nextScale = Math.min(box.width / canvasWidth, box.height / canvasHeight);
+                setScale(Number.isFinite(nextScale) && nextScale > 0 ? nextScale : 1);
             }
         }
         updateScale();
         const obs = new ResizeObserver(updateScale);
         if (containerRef.current) obs.observe(containerRef.current);
         return () => obs.disconnect();
-    }, []);
+    }, [canvasWidth, canvasHeight]);
 
     // IntersectionObserver: pause loop when iframe scrolls offscreen.
     useEffect(() => {
@@ -179,11 +188,11 @@ const HTMLPreview = memo(function HTMLPreview({ parsed, selectedAssetIds }) {
                 key={replayKey}
                 ref={iframeRef}
                 className="card-preview-frame"
-                width="1920"
-                height="1080"
+                width={canvasWidth}
+                height={canvasHeight}
                 sandbox="allow-scripts"
                 srcDoc={srcdoc}
-                style={{ transform: `scale(${scale})` }}
+                style={{ transform: `translate(-50%, -50%) scale(${scale})` }}
             />
             {parsed.mode !== 'realtime' && (
                 <button
@@ -197,6 +206,6 @@ const HTMLPreview = memo(function HTMLPreview({ parsed, selectedAssetIds }) {
     );
 });
 
-export default function Preview({ parsed, selectedAssetIds }) {
-    return <HTMLPreview parsed={parsed} selectedAssetIds={selectedAssetIds} />;
+export default function Preview({ parsed, selectedAssetIds, width, height }) {
+    return <HTMLPreview parsed={parsed} selectedAssetIds={selectedAssetIds} width={width} height={height} />;
 }
