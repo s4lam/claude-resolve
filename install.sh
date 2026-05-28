@@ -13,7 +13,8 @@ fi
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_SRC="$REPO_ROOT/plugin"
 RENDERER_SRC="$PLUGIN_SRC/renderer"
-DEST="/Library/Application Support/Blackmagic Design/DaVinci Resolve/Workflow Integration Plugins/com.clauderesolve.plugin"
+DEST_PARENT="/Library/Application Support/Blackmagic Design/DaVinci Resolve/Workflow Integration Plugins"
+DEST="$DEST_PARENT/com.clauderesolve.plugin"
 
 # ---------------------------------------------------------------- colours
 ESC=$(printf '\033')
@@ -302,6 +303,20 @@ JSON
 fi
 ok 'Built-in template packs present.'
 
+# Move aside a stale file that is blocking a directory install path.
+repair_blocking_path() {
+    local target="$1"
+    local label="$2"
+    if [ -e "$target" ] && [ ! -d "$target" ]; then
+        local backup="${target}.blocked.$(date +%Y%m%d%H%M%S)"
+        warn "$label exists but is not a directory - moving it aside."
+        if ! sudo mv "$target" "$backup"; then
+            fail "Could not repair $label at $target."
+        fi
+        ok "Moved blocking path to $backup"
+    fi
+}
+
 # 5 - Chromium
 step 5 'Downloading Playwright Chromium'
 if ! ( cd "$RENDERER_SRC" && npx --yes playwright install chromium ); then
@@ -320,9 +335,28 @@ fi
 # 7 - Copy plugin into DaVinci Resolve (needs root)
 step 7 'Installing plugin into DaVinci Resolve'
 printf '       %s(your administrator password may be requested)%s\n' "$DIM" "$RESET"
-if ! sudo rm -rf "$DEST" \
-   || ! sudo mkdir -p "$DEST" \
-   || ! sudo cp -R "$PLUGIN_SRC/." "$DEST/"; then
+
+repair_blocking_path "$DEST_PARENT" 'Workflow Integration Plugins path'
+
+if ! sudo mkdir -p "$DEST_PARENT"; then
+    fail "Could not create plugin parent folder: $DEST_PARENT"
+fi
+
+if [ -e "$DEST" ] || [ -L "$DEST" ]; then
+    if ! sudo rm -rf "$DEST"; then
+        repair_blocking_path "$DEST" 'Existing Resolve AI plugin path'
+    fi
+fi
+
+if [ -e "$DEST" ] || [ -L "$DEST" ]; then
+    fail "Could not remove old plugin path: $DEST"
+fi
+
+if ! sudo mkdir -p "$DEST"; then
+    fail "Could not create plugin folder: $DEST"
+fi
+
+if ! sudo ditto "$PLUGIN_SRC" "$DEST"; then
     fail 'Could not copy plugin files into /Library.'
 fi
 ok "Installed to $DEST"
