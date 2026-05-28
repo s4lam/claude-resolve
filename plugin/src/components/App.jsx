@@ -7,6 +7,25 @@ import WelcomeScreen from './WelcomeScreen';
 import PromptPresets from './PromptPresets';
 
 function tryParseStandardHTML(text) {
+    const matches = [...String(text || '').matchAll(/```html\s*\n(?:(?:\/\/|<!--)\s*FILE:\s*(\S+\.html)(?:\s*-->)?\s*\n)?([\s\S]*?)```/g)];
+    const parsedBlocks = matches.map((htmlMatch, index) => {
+        const html = htmlMatch[2].trim();
+        if (!html.includes('getAnimationDuration')) return null;
+        const hasFrame = html.includes('renderFrame');
+        const hasReact = html.includes('ReactDOM.createRoot');
+        if (!hasFrame && !hasReact) return null;
+        return {
+            type: 'html',
+            name: htmlMatch[1]?.replace('.html', '') || `Variation${index + 1}`,
+            html,
+            mode: hasFrame ? 'frame' : 'realtime'
+        };
+    }).filter(Boolean);
+    if (parsedBlocks.length > 1) {
+        return { type: 'variations', name: `${parsedBlocks.length} Variations`, items: parsedBlocks };
+    }
+    if (parsedBlocks.length === 1) return parsedBlocks[0];
+
     const htmlMatch = text.match(/```html\s*\n(?:(?:\/\/|<!--)\s*FILE:\s*(\S+\.html)(?:\s*-->)?\s*\n)?([\s\S]*?)```/);
     if (!htmlMatch) return null;
     const html = htmlMatch[2].trim();
@@ -23,14 +42,30 @@ export default function App() {
     const [authInfo, setAuthInfo] = useState({ status: 'checking', provider: 'auto', label: 'AI provider' });
     const [welcomed, setWelcomed] = useState(true);
     const [sidebar, setSidebar] = useState({ open: false, view: 'tools' });
-    const [config, setConfig] = useState({ provider: 'auto', model: 'sonnet', codexModel: 'default', fps: 25, width: 1920, height: 1080, brandKit: {}, selectedAssetIds: [], ui: {} });
+    const [config, setConfig] = useState({
+        provider: 'auto',
+        model: 'sonnet',
+        codexModel: 'default',
+        fps: 25,
+        width: 1920,
+        height: 1080,
+        brandKit: {},
+        selectedAssetIds: [],
+        generation: { variationCount: 3, locks: {} },
+        captions: { defaultStyle: 'clean' },
+        assets: { maxImportSizeMb: 25 },
+        ui: { activeToolTab: 'create' },
+        gallery: { favorites: [], recentIds: [] }
+    });
     const [messages, setMessages] = useState([]);
     const [isProcessing, setIsProcessing] = useState(false);
     const [activeTool, setActiveTool] = useState(null);
     const [activeProvider, setActiveProvider] = useState(null);
     const [tokenCount, setTokenCount] = useState(0);
     const [updateAvailable, setUpdateAvailable] = useState(false);
+    const [draftPrompt, setDraftPrompt] = useState({ text: '', revision: 0 });
     const nextId = useRef(0);
+    const nextDraftRevision = useRef(1);
 
     useEffect(() => {
         function appendToLast(data) {
@@ -120,7 +155,7 @@ export default function App() {
 
     function handleSend(text, options = {}) {
         const promptText = String(text || '').trim();
-        if (!promptText || isProcessing) return;
+        if (!promptText || isProcessing) return false;
         const displayText = options.displayText || promptText;
         setWelcomed(false);
         const userId = nextId.current++;
@@ -143,6 +178,18 @@ export default function App() {
         setActiveProvider(null);
         setTokenCount(0);
         (window.agentAPI || window.claudeAPI).sendPrompt(promptText);
+        return true;
+    }
+
+    function handleDraftPrompt(text) {
+        const promptText = String(text || '').trim();
+        if (!promptText || isProcessing) return false;
+        setWelcomed(false);
+        setDraftPrompt({
+            text: promptText,
+            revision: nextDraftRevision.current++
+        });
+        return true;
     }
 
     function handleRegenerate(message, variation) {
@@ -153,7 +200,8 @@ export default function App() {
             Simpler: 'Simplify the design and motion while keeping the same core idea, dimensions, duration, and readability.',
             'Transparent BG': 'Make ONLY the background transparent/alpha. Keep the same 1920x1080 canvas, same composition scale, same layout, same timing, and same subject size. Do not shrink, crop, center inside a smaller panel, or add any opaque rectangle behind the design. Set html/body/stage backgrounds to transparent and keep visible text/line/art elements full-size.',
             Longer: 'Extend the animation duration while preserving the same visual style and final composition.',
-            'Same style': 'Create a fresh variation in the same style, palette, composition scale, and motion language.'
+            'Same style': 'Create a fresh variation in the same style, palette, composition scale, and motion language.',
+            '3 variations': 'Create exactly three distinct complete HTML alternatives. Each alternative must be in its own fenced ```html block with a different FILE name. Keep the same request, dimensions, output contract, selected assets, and render safety rules.'
         };
         const prompt = [
             'Regenerate the previous Resolve AI overlay.',
@@ -167,7 +215,9 @@ export default function App() {
             message.parsed.html,
             '```',
             '',
-            'Return one complete replacement HTML file. Preserve the overlay contract.'
+            variation === '3 variations'
+                ? 'Return exactly three complete replacement HTML files in three separate ```html fenced blocks. Preserve the overlay contract in every file.'
+                : 'Return one complete replacement HTML file. Preserve the overlay contract.'
         ].join('\n');
         handleSend(prompt, {
             displayText: `Regenerate: ${variation}`,
@@ -277,6 +327,16 @@ export default function App() {
         }
     }
 
+    function handleToolsToggle() {
+        if (!sidebar.open) {
+            showSidebarView('tools');
+        } else if (sidebar.view === 'tools') {
+            closeSidebar();
+        } else {
+            showSidebarView('tools');
+        }
+    }
+
     const showWelcome = authInfo.status !== 'ready' || welcomed;
     const sidebarOpen = sidebar.open;
 
@@ -291,6 +351,7 @@ export default function App() {
                         config={config}
                         onConfigChange={handleConfigChange}
                         onPrompt={handleSend}
+                        onUsePrompt={handleDraftPrompt}
                         onShowTools={() => showSidebarView('tools')}
                         onClose={closeSidebar}
                     />
@@ -319,7 +380,7 @@ export default function App() {
                     )}
                     {!showWelcome && (
                         <PromptPresets
-                            onPrompt={handleSend}
+                            onPrompt={handleDraftPrompt}
                             disabled={isProcessing}
                             hasSelectedAssets={(config.selectedAssetIds || []).length > 0}
                         />
@@ -327,10 +388,12 @@ export default function App() {
                     <ChatInput
                         onSend={handleSend}
                         onStop={handleStop}
+                        draftPrompt={draftPrompt}
                         isProcessing={isProcessing}
                         sidebarOpen={sidebarOpen}
                         sidebarView={sidebar.view}
                         onToggleSidebar={handleSettingsToggle}
+                        onToggleTools={handleToolsToggle}
                         updateAvailable={updateAvailable}
                     />
                 </div>

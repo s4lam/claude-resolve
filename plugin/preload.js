@@ -20,6 +20,11 @@ contextBridge.exposeInMainWorld('resolveAPI', {
     cleanup: () => ipcRenderer.invoke('resolve:cleanup')
 });
 
+contextBridge.exposeInMainWorld('timelineAPI', {
+    getContext: () => ipcRenderer.invoke('timeline:getContext'),
+    generateAtPlayhead: (payload) => ipcRenderer.invoke('timeline:generateAtPlayhead', payload)
+});
+
 contextBridge.exposeInMainWorld('overlayAPI', {
     renderMov: (data) => ipcRenderer.invoke('overlay:renderMov', data),
     validate: (data) => ipcRenderer.invoke('overlay:validate', data),
@@ -33,7 +38,8 @@ contextBridge.exposeInMainWorld('overlayAPI', {
     renameRender: (name, nextName) => ipcRenderer.invoke('renders:rename', name, nextName),
     revealRender: (name) => ipcRenderer.invoke('renders:reveal', name),
     deleteAllRenders: () => ipcRenderer.invoke('renders:deleteAll'),
-    syncToMediaPool: () => ipcRenderer.invoke('renders:syncToMediaPool')
+    syncToMediaPool: () => ipcRenderer.invoke('renders:syncToMediaPool'),
+    queue: (payload) => ipcRenderer.invoke('renders:queue', payload)
 });
 
 function createAgentBridge(prefix) {
@@ -83,10 +89,12 @@ contextBridge.exposeInMainWorld('templateAPI', {
 
 contextBridge.exposeInMainWorld('assetAPI', {
     list: () => ipcRenderer.invoke('assets:list'),
-    add: () => ipcRenderer.invoke('assets:add'),
+    add: (payload) => ipcRenderer.invoke('assets:add', payload),
     update: (id, patch) => ipcRenderer.invoke('assets:update', id, patch),
     delete: (id) => ipcRenderer.invoke('assets:delete', id),
     reveal: (id) => ipcRenderer.invoke('assets:reveal', id),
+    inspect: (id) => ipcRenderer.invoke('assets:inspect', id),
+    extractColors: (id) => ipcRenderer.invoke('assets:extractColors', id),
     resolveHtml: (html, selectedAssetIds, options) => ipcRenderer.invoke('assets:resolveHtml', html, selectedAssetIds, options)
 });
 
@@ -94,12 +102,23 @@ contextBridge.exposeInMainWorld('galleryAPI', {
     list: () => ipcRenderer.invoke('gallery:list'),
     use: (id) => ipcRenderer.invoke('gallery:use', id),
     importPack: () => ipcRenderer.invoke('templatePacks:import'),
+    installPackFromUrl: (url) => ipcRenderer.invoke('templatePacks:installFromUrl', { url }),
     validatePack: (pack) => ipcRenderer.invoke('templatePacks:validate', pack)
 });
 
 contextBridge.exposeInMainWorld('captionAPI', {
     import: () => ipcRenderer.invoke('captions:import'),
+    parse: (payload) => ipcRenderer.invoke('captions:parse', payload),
     generate: (payload) => ipcRenderer.invoke('captions:generate', payload)
+});
+
+contextBridge.exposeInMainWorld('variationAPI', {
+    generate: (payload) => ipcRenderer.invoke('variations:generate', payload),
+    generateMultiPrompt: (payload) => ipcRenderer.invoke('variations:generateMultiPrompt', payload)
+});
+
+contextBridge.exposeInMainWorld('debugAPI', {
+    createBundle: (options) => ipcRenderer.invoke('debug:createBundle', options)
 });
 
 contextBridge.exposeInMainWorld('showcaseAPI', {

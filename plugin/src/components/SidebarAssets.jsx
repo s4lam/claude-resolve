@@ -20,18 +20,31 @@ function rerenderPrompt(render) {
 
 export default function SidebarAssets({ onPrompt }) {
     const [renders, setRenders] = useState([]);
+    const [queueJobs, setQueueJobs] = useState([]);
     const [syncStatus, setSyncStatus] = useState(null);
     const [query, setQuery] = useState('');
 
     useEffect(() => {
         refreshRenders();
         const onChanged = () => refreshRenders();
+        const onQueueChanged = () => refreshQueue();
         window.addEventListener('resolve-ai:renders-changed', onChanged);
-        return () => window.removeEventListener('resolve-ai:renders-changed', onChanged);
+        window.addEventListener('resolve-ai:render-queue-changed', onQueueChanged);
+        refreshQueue();
+        return () => {
+            window.removeEventListener('resolve-ai:renders-changed', onChanged);
+            window.removeEventListener('resolve-ai:render-queue-changed', onQueueChanged);
+        };
     }, []);
 
     async function refreshRenders() {
         setRenders(await window.overlayAPI.listRenders());
+    }
+
+    async function refreshQueue() {
+        if (!window.overlayAPI?.queue) return;
+        const result = await window.overlayAPI.queue({ action: 'list' });
+        setQueueJobs(result?.jobs || []);
     }
 
     async function handleDeleteRender(name) {
@@ -76,6 +89,11 @@ export default function SidebarAssets({ onPrompt }) {
         setTimeout(() => setSyncStatus(null), 3000);
     }
 
+    async function handleQueueAction(action, id) {
+        await window.overlayAPI.queue({ action, id });
+        await refreshQueue();
+    }
+
     const filteredRenders = renders.filter(render => {
         const haystack = [
             render.name,
@@ -106,6 +124,27 @@ export default function SidebarAssets({ onPrompt }) {
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Search renders"
             />
+
+            {queueJobs.length > 0 && (
+                <div className="render-queue-panel">
+                    <div className="timeline-subhead">Render queue</div>
+                    {queueJobs.slice(0, 5).map(job => (
+                        <div className="render-queue-job" key={job.id}>
+                            <div>
+                                <strong>{job.name || job.id}</strong>
+                                <span>{job.status} / attempts {job.attempts || 0}</span>
+                            </div>
+                            {['queued', 'rendering'].includes(job.status) && (
+                                <button className="mini-action" onClick={() => handleQueueAction('cancel', job.id)}>Cancel</button>
+                            )}
+                            {['failed', 'canceled', 'interrupted'].includes(job.status) && (
+                                <button className="mini-action" onClick={() => handleQueueAction('retry', job.id)}>Retry</button>
+                            )}
+                        </div>
+                    ))}
+                    <button className="mini-action" onClick={() => handleQueueAction('clearCompleted')}>Clear finished</button>
+                </div>
+            )}
 
             {renders.length === 0 ? (
                 <div className="sb-empty">No renders yet</div>

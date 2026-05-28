@@ -3,7 +3,7 @@ import Preview from './Preview';
 import StatusIndicator from './StatusIndicator';
 import { Download } from './Icons';
 
-const REGENERATE_ACTIONS = ['More cinematic', 'Simpler', 'Transparent BG', 'Longer', 'Same style'];
+const REGENERATE_ACTIONS = ['More cinematic', 'Simpler', 'Transparent BG', 'Longer', 'Same style', '3 variations'];
 
 function RenderMovAction({ parsed, message, config, provider, model, validation, onRendered, onRepair }) {
     const [status, setStatus] = useState(null);
@@ -23,7 +23,21 @@ function RenderMovAction({ parsed, message, config, provider, model, validation,
         setStatus('rendering');
         setProgress(0);
         setErrorMsg('');
+        let queueJob = null;
         try {
+            try {
+                const queued = await window.overlayAPI.queue?.({
+                    action: 'enqueue',
+                    job: {
+                        name: parsed.name,
+                        prompt: message.prompt,
+                        provider,
+                        model
+                    }
+                });
+                queueJob = queued?.result;
+                if (queueJob?.id) await window.overlayAPI.queue({ action: 'start', id: queueJob.id });
+            } catch { /* render queue is best-effort */ }
             const result = await window.overlayAPI.renderMov({
                 html: parsed.html,
                 name: parsed.name,
@@ -34,21 +48,34 @@ function RenderMovAction({ parsed, message, config, provider, model, validation,
                     prompt: message.prompt,
                     provider,
                     model,
+                    renderQueueId: queueJob?.id || null,
                     selectedAssetIds: config.selectedAssetIds || [],
                     validationWarnings: validation?.warnings || []
                 }
             });
             if (result.success) {
+                try {
+                    if (queueJob?.id) await window.overlayAPI.queue?.({ action: 'complete', id: queueJob.id, result: { name: result.name, path: result.path } });
+                } catch { /* render queue is best-effort */ }
                 setStatus(result.warning ? 'rendered' : 'done');
                 onRendered?.(result);
                 window.dispatchEvent(new CustomEvent('resolve-ai:renders-changed'));
+                window.dispatchEvent(new CustomEvent('resolve-ai:render-queue-changed'));
             } else {
                 setErrorMsg(result.error || 'Unknown error');
+                try {
+                    if (queueJob?.id) await window.overlayAPI.queue?.({ action: 'fail', id: queueJob.id, error: result.error || 'Unknown error' });
+                } catch { /* render queue is best-effort */ }
                 setStatus('error');
+                window.dispatchEvent(new CustomEvent('resolve-ai:render-queue-changed'));
             }
         } catch (err) {
             setErrorMsg(err.message || 'Unknown error');
+            try {
+                if (queueJob?.id) await window.overlayAPI.queue?.({ action: 'fail', id: queueJob.id, error: err.message || 'Unknown error' });
+            } catch { /* render queue is best-effort */ }
             setStatus('error');
+            window.dispatchEvent(new CustomEvent('resolve-ai:render-queue-changed'));
         }
     }
 
@@ -175,6 +202,31 @@ function RenderCard({ message, parsed, config, provider, model, onRegenerate, on
     );
 }
 
+function VariationSetCard({ message, parsed, config, provider, model, onRegenerate, onRepair }) {
+    return (
+        <div className="variation-result-set">
+            <div className="variation-result-head">
+                <strong>{parsed.items.length} variations</strong>
+                <span>Choose one to render, save, or refine.</span>
+            </div>
+            <div className="variation-result-grid">
+                {parsed.items.map((item, index) => (
+                    <RenderCard
+                        key={`${item.name}-${index}`}
+                        message={{ ...message, parsed: item }}
+                        parsed={item}
+                        config={config}
+                        provider={provider}
+                        model={model}
+                        onRegenerate={onRegenerate}
+                        onRepair={onRepair}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+}
+
 function MessageBubble({ message, activeTool, tokenCount, model, provider, config, onRegenerate, onRepair }) {
     if (message.type === 'user') {
         return (
@@ -195,15 +247,25 @@ function MessageBubble({ message, activeTool, tokenCount, model, provider, confi
                 {message.isThinking
                     ? <StatusIndicator tool={activeTool} tokens={tokenCount} model={model} provider={provider} />
                     : parsed
-                        ? <RenderCard
-                            message={message}
-                            parsed={parsed}
-                            config={config}
-                            provider={provider}
-                            model={model}
-                            onRegenerate={onRegenerate}
-                            onRepair={onRepair}
-                        />
+                        ? parsed.type === 'variations'
+                            ? <VariationSetCard
+                                message={message}
+                                parsed={parsed}
+                                config={config}
+                                provider={provider}
+                                model={model}
+                                onRegenerate={onRegenerate}
+                                onRepair={onRepair}
+                            />
+                            : <RenderCard
+                                message={message}
+                                parsed={parsed}
+                                config={config}
+                                provider={provider}
+                                model={model}
+                                onRegenerate={onRegenerate}
+                                onRepair={onRepair}
+                            />
                         : <div className="bubble">{message.text}</div>}
                 {parsed && (
                     <details className="code-toggle">

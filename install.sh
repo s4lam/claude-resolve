@@ -258,6 +258,16 @@ if ! ( cd "$RENDERER_SRC" && npm install --no-audit --no-fund ); then
 fi
 ok 'Renderer dependencies installed.'
 
+if [ ! -f "$PLUGIN_SRC/dist/index.html" ]; then
+    warn 'Plugin UI bundle missing - building plugin/dist...'
+    if ! ( cd "$PLUGIN_SRC" && npm install --no-audit --no-fund && npm run build ); then
+        fail 'Could not build plugin UI. From the repo root run: npm --prefix plugin install && npm --prefix plugin run build, then re-run the installer.'
+    fi
+    ok 'Plugin UI bundle built.'
+else
+    ok 'Plugin UI bundle present.'
+fi
+
 # 5 - Chromium
 step 5 'Downloading Playwright Chromium'
 if ! ( cd "$RENDERER_SRC" && npx --yes playwright install chromium ); then

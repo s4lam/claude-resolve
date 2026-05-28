@@ -1,8 +1,9 @@
-import React, { useRef, useEffect } from 'react';
-import { Gear, Send, Stop } from './Icons';
+import React, { useRef, useEffect, useState } from 'react';
+import { Gear, Send, Stop, Tools } from './Icons';
 
-export default function ChatInput({ onSend, onStop, isProcessing, sidebarOpen, sidebarView, onToggleSidebar, updateAvailable }) {
+export default function ChatInput({ onSend, onStop, draftPrompt, isProcessing, sidebarOpen, sidebarView, onToggleSidebar, onToggleTools, updateAvailable }) {
     const inputRef = useRef(null);
+    const [value, setValue] = useState('');
 
     useEffect(() => {
         if (!isProcessing && inputRef.current) {
@@ -10,25 +11,53 @@ export default function ChatInput({ onSend, onStop, isProcessing, sidebarOpen, s
         }
     }, [isProcessing]);
 
+    useEffect(() => {
+        if (!draftPrompt?.text || isProcessing) return;
+        setValue(draftPrompt.text);
+        requestAnimationFrame(() => {
+            if (!inputRef.current) return;
+            inputRef.current.focus();
+            inputRef.current.setSelectionRange(draftPrompt.text.length, draftPrompt.text.length);
+        });
+    }, [draftPrompt?.revision, draftPrompt?.text, isProcessing]);
+
+    useEffect(() => {
+        if (!inputRef.current) return;
+        inputRef.current.style.height = 'auto';
+        inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 92)}px`;
+    }, [value]);
+
     function handleSend() {
-        const text = inputRef.current.value.trim();
+        const text = value.trim();
         if (!text || isProcessing) return;
-        inputRef.current.value = '';
+        setValue('');
         onSend(text);
     }
 
     function handleKeyDown(e) {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSend();
         }
     }
 
     const settingsOpen = sidebarOpen && sidebarView === 'settings';
+    const toolsOpen = sidebarOpen && sidebarView === 'tools';
     const gearLabel = settingsOpen ? 'Close settings' : 'Open settings';
+    const toolsLabel = toolsOpen ? 'Close tools' : 'Open create tools';
 
     return (
         <div className="composer">
+            <button
+                className={'composer-tools' + (toolsOpen ? ' on' : '')}
+                onClick={onToggleTools}
+                aria-label={toolsLabel}
+                aria-pressed={toolsOpen}
+                title={toolsLabel}
+            >
+                <Tools />
+            </button>
+
             <button
                 className={'composer-gear' + (settingsOpen ? ' on' : '')}
                 onClick={onToggleSidebar}
@@ -41,11 +70,14 @@ export default function ChatInput({ onSend, onStop, isProcessing, sidebarOpen, s
             </button>
 
             <div className="input-wrap">
-                <input
+                <textarea
                     ref={inputRef}
-                    type="text"
                     className="composer-input"
                     placeholder="Ask Resolve AI to animate..."
+                    aria-label="Prompt"
+                    value={value}
+                    onChange={e => setValue(e.target.value)}
+                    rows={1}
                     autoFocus
                     disabled={isProcessing}
                     onKeyDown={handleKeyDown}

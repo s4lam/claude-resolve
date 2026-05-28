@@ -43,6 +43,16 @@ function codes(result) {
     config: { width: 1920, height: 1080 }
   });
   assert(codes(result).includes('transparent-mismatch'));
+  assert(codes(result).includes('transparent-base-missing'));
+}
+
+{
+  const result = validateOverlayHtml({
+    prompt: 'transparent background title overlay',
+    html: '<style>html, body { background: transparent; } #stage { background: #101010; }</style><script>const DURATION = 5; window.getAnimationDuration = () => DURATION; window.renderFrame = () => {};</script>',
+    config: { width: 1920, height: 1080 }
+  });
+  assert(codes(result).includes('transparent-mismatch'));
 }
 
 {

@@ -39,6 +39,14 @@ On macOS, if it's older than 18, upgrade with `brew install node` (latest) or `f
 
 The installer checks for DaVinci Resolve and Node.js, installs the renderer's dependencies (Playwright + Chromium), lets you choose Codex CLI or Claude Code if no supported AI CLI is found, and copies the plugin into Resolve. After installing, open the plugin from **Workspace > Workflow Integration > Resolve AI**.
 
+If installation fails with `Verification failed - missing: dist/index.html`, the plugin UI bundle was not built before the installer copied files. Update to the latest installer and run it again, or build manually from the repo root:
+
+```bash
+npm --prefix plugin install
+npm --prefix plugin run build
+./install.command
+```
+
 Install and log in to at least one AI CLI:
 
 ```
@@ -63,7 +71,7 @@ Codex auth is handled only by the Codex CLI (`codex login` / `codex login status
 3. Click a Prompt Gallery item or type a prompt
 4. Preview the generated motion graphic
 5. Click **Render .mov** to import a ProRes 4444 overlay at the playhead
-6. Use **Regenerate**, **Fix with AI**, **Save as Template**, or render history to iterate
+6. Use **Timeline tools**, **Regenerate**, **Fix with AI**, **Save as Template**, or render history to iterate
 
 ### Prompt → Render Examples
 
@@ -84,9 +92,12 @@ Each render can also write local sidecar metadata beside the .mov so the history
 ## Growth Features
 
 - **Prompt Gallery**: built-in creator, podcast, gaming, product, documentary, business, social, event, sports, and music prompts.
-- **Template Packs**: local JSON packs that contributors can submit and users can import.
-- **Captions**: local SRT/VTT import with clean, kinetic, karaoke, social, and podcast styles.
-- **Asset-aware generation**: attach logos, products, textures, icons, and reference images with notes.
+- **Timeline tools**: generate titles, lower thirds, transitions, and re-renders with current timeline context.
+- **Create workflow**: choose motion type, duration, background mode, aspect ratio, style intensity, and review the generation brief before sending.
+- **Template Packs**: local JSON packs that contributors can submit and users can import from disk or GitHub raw URLs.
+- **Captions**: local SRT/VTT import, pasted transcript parsing, preview cues, and clean/kinetic/karaoke/social/podcast styles.
+- **Asset-aware generation**: drag/drop images, inspect asset health, attach logos/products/textures/reference images, and extract brand colors.
+- **Variation previews**: draft multiple prompt variations with locks for logo, colors, layout, and animation-only changes.
 - **Fix with AI**: send render failures back to the active provider for repair.
 - **Showcase builder**: export a static local showcase page from saved templates/prompts.
 
@@ -100,9 +111,12 @@ Open the sidebar (gear icon) to configure:
 - **Resolution**: 1920×1080, 3840×2160, 1080×1920, 1080×1350, or 1080×1080
 - **Provider Health**: installed/login/version status for Claude and Codex, plus a collapsible raw log drawer for troubleshooting
 - **Brand Kit**: local colors, fonts, logo path, tone, and common phrases injected into new generations
-- **Asset Library**: add local PNG/JPG/WebP/SVG/GIF assets, attach selected assets to new prompts, and provide notes so the AI uses them correctly
+- **Timeline**: quick actions that use current timeline FPS, resolution, playhead, and duration when Resolve exposes them
+- **Asset Library**: drag/drop local PNG/JPG/WebP/SVG/GIF assets, inspect dimensions/health, attach selected assets to new prompts, and provide notes so the AI uses them correctly
+- **Variations**: generate multiple prompt directions and lock logo/colors/layout/animation behavior
+- **Gallery**: search, category filters, favorites, recents, local import, and GitHub raw URL installs
 - **Templates**: save generated overlays locally and reuse them later
-- **Assets**: searchable render history with thumbnails, rename, reveal, delete, sync, and re-render
+- **Renders**: searchable render history with thumbnails, rename, reveal, delete, sync, and re-render
 
 ## Contributing
 

@@ -1,7 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { pathToFileURL } = require('url');
 const { ASSET_DIR, CONFIG_DIR } = require('./paths');
+const { readConfig } = require('./config');
 
 const STORE_PATH = path.join(CONFIG_DIR, 'assets.json');
 const ALLOWED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.svg', '.gif']);
@@ -25,8 +27,7 @@ function readAssets(storePath = STORE_PATH, assetDir = ASSET_DIR) {
     if (!Array.isArray(assets)) assets = [];
     return assets
         .filter(asset => asset && asset.fileName)
-        .map(asset => hydrateAsset(asset, assetDir))
-        .filter(asset => fs.existsSync(asset.path));
+        .map(asset => hydrateAsset(asset, assetDir));
 }
 
 function writeAssets(assets, storePath = STORE_PATH) {
@@ -37,11 +38,13 @@ function writeAssets(assets, storePath = STORE_PATH) {
 
 function hydrateAsset(asset, assetDir = ASSET_DIR) {
     const fullPath = path.join(assetDir, asset.fileName);
+    const exists = fs.existsSync(fullPath);
     return {
         ...asset,
         path: fullPath,
         url: pathToFileURL(fullPath).href,
-        size: fs.existsSync(fullPath) ? fs.statSync(fullPath).size : asset.size || 0
+        exists,
+        size: exists ? fs.statSync(fullPath).size : asset.size || 0
     };
 }
 
@@ -109,6 +112,137 @@ function mimeFromExtension(fileName) {
     return 'image/jpeg';
 }
 
+function readUInt24LE(buffer, offset) {
+    return buffer[offset] | (buffer[offset + 1] << 8) | (buffer[offset + 2] << 16);
+}
+
+function inspectPng(buffer) {
+    if (buffer.length < 33 || buffer.toString('ascii', 1, 4) !== 'PNG') return null;
+    const width = buffer.readUInt32BE(16);
+    const height = buffer.readUInt32BE(20);
+    const colorType = buffer[25];
+    const hasAlpha = colorType === 4 || colorType === 6 || buffer.includes(Buffer.from('tRNS'));
+    return { width, height, hasAlpha };
+}
+
+function inspectGif(buffer) {
+    if (buffer.length < 10 || !/^GIF8[79]a$/.test(buffer.toString('ascii', 0, 6))) return null;
+    return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8), hasAlpha: true };
+}
+
+function inspectJpeg(buffer) {
+    if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) return null;
+    let offset = 2;
+    while (offset < buffer.length - 9) {
+        if (buffer[offset] !== 0xff) {
+            offset += 1;
+            continue;
+        }
+        const marker = buffer[offset + 1];
+        const length = buffer.readUInt16BE(offset + 2);
+        if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+            return { width: buffer.readUInt16BE(offset + 7), height: buffer.readUInt16BE(offset + 5), hasAlpha: false };
+        }
+        offset += 2 + length;
+    }
+    return null;
+}
+
+function inspectWebp(buffer) {
+    if (buffer.length < 30 || buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WEBP') return null;
+    const chunk = buffer.toString('ascii', 12, 16);
+    if (chunk === 'VP8X' && buffer.length >= 30) {
+        return {
+            width: 1 + readUInt24LE(buffer, 24),
+            height: 1 + readUInt24LE(buffer, 27),
+            hasAlpha: Boolean(buffer[20] & 0x10)
+        };
+    }
+    if (chunk === 'VP8 ' && buffer.length >= 30) {
+        return { width: buffer.readUInt16LE(26) & 0x3fff, height: buffer.readUInt16LE(28) & 0x3fff, hasAlpha: false };
+    }
+    if (chunk === 'VP8L' && buffer.length >= 25) {
+        const b0 = buffer[21], b1 = buffer[22], b2 = buffer[23], b3 = buffer[24];
+        return {
+            width: 1 + (((b1 & 0x3f) << 8) | b0),
+            height: 1 + (((b3 & 0x0f) << 10) | (b2 << 2) | ((b1 & 0xc0) >> 6)),
+            hasAlpha: Boolean(b3 & 0x10)
+        };
+    }
+    return null;
+}
+
+function inspectSvg(text) {
+    const width = Number((text.match(/\bwidth=["']?([0-9.]+)/i) || [])[1]) || null;
+    const height = Number((text.match(/\bheight=["']?([0-9.]+)/i) || [])[1]) || null;
+    if (width && height) return { width, height, hasAlpha: true };
+    const viewBox = (text.match(/\bviewBox=["']([^"']+)["']/i) || [])[1];
+    const parts = viewBox ? viewBox.trim().split(/\s+/).map(Number) : [];
+    if (parts.length === 4) return { width: parts[2] || null, height: parts[3] || null, hasAlpha: true };
+    return { width: null, height: null, hasAlpha: true };
+}
+
+function inspectImageFile(filePath) {
+    const ext = path.extname(filePath || '').toLowerCase();
+    if (!fs.existsSync(filePath)) return null;
+    if (ext === '.svg') return inspectSvg(fs.readFileSync(filePath, 'utf8'));
+    const buffer = fs.readFileSync(filePath);
+    return inspectPng(buffer) || inspectJpeg(buffer) || inspectWebp(buffer) || inspectGif(buffer) || null;
+}
+
+function getAssetHealth(asset, options = {}) {
+    const maxMb = Number(options.maxImportSizeMb || readConfig().assets?.maxImportSizeMb || 25);
+    const maxBytes = maxMb * 1024 * 1024;
+    const health = [];
+    if (!asset?.exists || !fs.existsSync(asset.path)) health.push({ code: 'missing', label: 'Missing file', severity: 'error' });
+    if (!isAllowedAsset(asset?.path || asset?.fileName)) health.push({ code: 'unsupported', label: 'Unsupported type', severity: 'error' });
+    if (asset?.size && asset.size > maxBytes) health.push({ code: 'too-large', label: `Too large (${maxMb} MB max)`, severity: 'warning' });
+    let dimensions = null;
+    try {
+        dimensions = asset?.exists ? inspectImageFile(asset.path) : null;
+        if (dimensions?.hasAlpha && path.extname(asset.path).toLowerCase() === '.png') {
+            health.push({ code: 'transparent-png', label: 'Transparent PNG', severity: 'info' });
+        }
+    } catch {
+        health.push({ code: 'unreadable', label: 'Unreadable image', severity: 'warning' });
+    }
+    if (health.length === 0) health.push({ code: 'ready', label: 'Ready', severity: 'success' });
+    return { health, dimensions };
+}
+
+function inspectAsset(id, options = {}) {
+    const asset = readAssets(options.storePath || STORE_PATH, options.assetDir || ASSET_DIR).find(item => item.id === id);
+    if (!asset) return { success: false, error: 'Asset not found' };
+    const details = getAssetHealth(asset, options);
+    return { success: true, asset: { ...asset, ...details } };
+}
+
+function fallbackPalette(seed) {
+    const hash = crypto.createHash('sha1').update(String(seed || 'resolve-ai')).digest();
+    return [0, 3, 6, 9, 12].map(offset => `#${hash.slice(offset, offset + 3).toString('hex')}`);
+}
+
+function extractColorsFromAsset(id, options = {}) {
+    const result = inspectAsset(id, options);
+    if (!result.success) return result;
+    const { asset } = result;
+    let colors = [];
+    let source = 'asset';
+    try {
+        if (path.extname(asset.path).toLowerCase() === '.svg' && fs.existsSync(asset.path)) {
+            const text = fs.readFileSync(asset.path, 'utf8');
+            colors = [...new Set((text.match(/#[0-9a-fA-F]{3,8}\b/g) || []).map(color => color.toLowerCase()))].slice(0, 6);
+        }
+    } catch {
+        colors = [];
+    }
+    if (colors.length === 0) {
+        colors = fallbackPalette(asset.fileName || asset.name).slice(0, 5);
+        source = 'fallback';
+    }
+    return { success: true, colors, source };
+}
+
 function updateAsset(id, patch = {}, storePath = STORE_PATH, assetDir = ASSET_DIR) {
     const assets = readAssets(storePath, assetDir);
     const index = assets.findIndex(asset => asset.id === id);
@@ -141,6 +275,7 @@ function formatSelectedAssets(selectedAssetIds = [], options = {}) {
 
     const assets = readAssets(options.storePath || STORE_PATH, options.assetDir || ASSET_DIR)
         .filter(asset => ids.has(asset.id) || asset.alwaysInclude)
+        .filter(asset => asset.exists && isAllowedAsset(asset.path))
         .slice(0, 8);
     if (assets.length === 0) return '';
 
@@ -199,7 +334,7 @@ function resolvedAssetUrl(asset, options = {}) {
 function getRelevantAssets(selectedAssetIds = [], options = {}) {
     const ids = new Set(Array.isArray(selectedAssetIds) ? selectedAssetIds : []);
     return readAssets(options.storePath || STORE_PATH, options.assetDir || ASSET_DIR)
-        .filter(asset => ids.has(asset.id) || asset.alwaysInclude);
+        .filter(asset => (ids.has(asset.id) || asset.alwaysInclude) && asset.exists && isAllowedAsset(asset.path));
 }
 
 function resolveAssetReferences(html = '', selectedAssetIds = [], options = {}) {
@@ -252,6 +387,8 @@ function setupAssetHandlers(ipcMain) {
     ipcMain.handle('assets:update', (_event, id, patch) => updateAsset(id, patch));
     ipcMain.handle('assets:delete', (_event, id) => deleteAsset(id));
     ipcMain.handle('assets:reveal', handleRevealAsset);
+    ipcMain.handle('assets:inspect', (_event, id) => inspectAsset(id));
+    ipcMain.handle('assets:extractColors', (_event, id) => extractColorsFromAsset(id));
     ipcMain.handle('assets:resolveHtml', (_event, html, selectedAssetIds, options) => resolveAssetReferences(html, selectedAssetIds, options));
 }
 
@@ -261,6 +398,10 @@ module.exports = {
     deleteAsset,
     formatSelectedAssets,
     importAssetFiles,
+    inspectAsset,
+    inspectImageFile,
+    extractColorsFromAsset,
+    getAssetHealth,
     isAllowedAsset,
     readAssets,
     resolveAssetReferences,

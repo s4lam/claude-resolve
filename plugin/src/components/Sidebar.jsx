@@ -5,17 +5,23 @@ import SidebarCaptions from './SidebarCaptions';
 import SidebarPromptGallery from './SidebarPromptGallery';
 import SidebarSettings from './SidebarSettings';
 import SidebarTemplates from './SidebarTemplates';
+import SidebarCreate from './SidebarCreate';
+import SidebarTimeline from './SidebarTimeline';
+import SidebarVariations from './SidebarVariations';
 
 const TOOL_TABS = [
+    ['create', 'Create'],
+    ['timeline', 'Timeline'],
     ['assets', 'Assets'],
-    ['renders', 'Renders'],
-    ['gallery', 'Gallery'],
+    ['variations', 'Variations'],
     ['captions', 'Captions'],
-    ['templates', 'Templates']
+    ['gallery', 'Gallery'],
+    ['templates', 'Templates'],
+    ['renders', 'Renders'],
 ];
 
-export default function Sidebar({ view = 'tools', config, onConfigChange, onPrompt, onShowTools, onClose }) {
-    const [activeTool, setActiveTool] = useState('assets');
+export default function Sidebar({ view = 'tools', config, onConfigChange, onPrompt, onUsePrompt, onShowTools, onClose }) {
+    const [activeTool, setActiveTool] = useState(config?.ui?.activeToolTab || 'create');
 
     if (view === 'settings') {
         return (
@@ -31,11 +37,19 @@ export default function Sidebar({ view = 'tools', config, onConfigChange, onProm
     }
 
     function renderActiveTool() {
-        if (activeTool === 'renders') return <SidebarAssets onPrompt={onPrompt} />;
-        if (activeTool === 'gallery') return <SidebarPromptGallery onPrompt={onPrompt} />;
-        if (activeTool === 'captions') return <SidebarCaptions config={config} onPrompt={onPrompt} />;
-        if (activeTool === 'templates') return <SidebarTemplates onPrompt={onPrompt} />;
-        return <SidebarAssetLibrary config={config} onConfigChange={onConfigChange} />;
+        if (activeTool === 'create') return <SidebarCreate config={config} onPrompt={onPrompt} />;
+        if (activeTool === 'timeline') return <SidebarTimeline config={config} onPrompt={onUsePrompt || onPrompt} />;
+        if (activeTool === 'variations') return <SidebarVariations config={config} onConfigChange={onConfigChange} onPrompt={onPrompt} onUsePrompt={onUsePrompt || onPrompt} />;
+        if (activeTool === 'renders') return <SidebarAssets onPrompt={onUsePrompt || onPrompt} />;
+        if (activeTool === 'gallery') return <SidebarPromptGallery config={config} onConfigChange={onConfigChange} onPrompt={onUsePrompt || onPrompt} />;
+        if (activeTool === 'captions') return <SidebarCaptions config={config} onConfigChange={onConfigChange} onPrompt={onPrompt} />;
+        if (activeTool === 'templates') return <SidebarTemplates onPrompt={onUsePrompt || onPrompt} />;
+        return <SidebarAssetLibrary config={config} onConfigChange={onConfigChange} onPrompt={onUsePrompt || onPrompt} />;
+    }
+
+    function handleToolSelect(id) {
+        setActiveTool(id);
+        onConfigChange?.({ ui: { activeToolTab: id } });
     }
 
     return (
@@ -61,7 +75,7 @@ export default function Sidebar({ view = 'tools', config, onConfigChange, onProm
                         aria-selected={activeTool === id}
                         aria-controls={`tools-panel-${id}`}
                         className={'tools-tab' + (activeTool === id ? ' active' : '')}
-                        onClick={() => setActiveTool(id)}
+                        onClick={() => handleToolSelect(id)}
                         key={id}
                     >
                         {label}

@@ -344,6 +344,27 @@ Pop-Location
 if ($exit -ne 0) { Fail 'npm install failed in plugin\renderer.' }
 Ok 'Renderer dependencies installed.'
 
+$distIndex = Join-Path $PluginSrc 'dist\index.html'
+if (-not (Test-Path $distIndex)) {
+    Warn 'Plugin UI bundle missing - building plugin\dist...'
+    Push-Location $PluginSrc
+    & npm install --no-audit --no-fund
+    $installExit = $LASTEXITCODE
+    if ($installExit -eq 0) {
+        & npm run build
+        $buildExit = $LASTEXITCODE
+    } else {
+        $buildExit = $installExit
+    }
+    Pop-Location
+    if ($buildExit -ne 0 -or -not (Test-Path $distIndex)) {
+        Fail 'Could not build plugin UI. From the repo root run: npm --prefix plugin install; npm --prefix plugin run build; then re-run the installer.'
+    }
+    Ok 'Plugin UI bundle built.'
+} else {
+    Ok 'Plugin UI bundle present.'
+}
+
 # 5 - Chromium
 Step 5 'Downloading Playwright Chromium'
 Push-Location $RendererSrc

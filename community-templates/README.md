@@ -21,3 +21,5 @@ Requirements:
 - Every template needs prompt, category, tags, thumbnail, FPS, dimensions, and safe HTML.
 - HTML must not load remote scripts, fonts, images, or secrets.
 - Keep examples universal and reusable.
+- Test local packs with Prompt Gallery > Import.
+- Test hosted packs with Prompt Gallery > Install URL using a raw GitHub `.json` URL.

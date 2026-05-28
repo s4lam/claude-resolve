@@ -6,7 +6,9 @@
     "scripts": {
         "start": "electron .",
         "test": "node tests/run-tests.js",
-        "build": "vite build"
+        "build": "vite build",
+        "smoke": "node ../scripts/smoke-plugin-ui.js",
+        "package:release": "node ../scripts/package-release.js"
     },
     "devDependencies": {
         "@vitejs/plugin-react": "^6.0.1",

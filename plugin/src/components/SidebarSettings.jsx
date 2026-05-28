@@ -95,6 +95,7 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
     const [brandKit, setBrandKit] = useState(config.brandKit || {});
     const [brandStatus, setBrandStatus] = useState('');
     const [timelineStatus, setTimelineStatus] = useState('');
+    const [debugStatus, setDebugStatus] = useState('');
 
     useEffect(() => {
         runCheck(false);
@@ -158,6 +159,17 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
     async function handleClearLogs() {
         await window.agentAPI.clearLogs();
         await refreshHealth();
+    }
+
+    async function handleDebugBundle() {
+        setDebugStatus('Creating');
+        try {
+            const result = await window.debugAPI?.createBundle?.();
+            setDebugStatus(result?.success ? 'Bundle ready' : 'Failed');
+        } catch {
+            setDebugStatus('Failed');
+        }
+        setTimeout(() => setDebugStatus(''), 2600);
     }
 
     async function handleRawToggle() {
@@ -367,6 +379,9 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
                         <button className="settings-small-btn" onClick={refreshHealth}>Refresh health</button>
                         <button className="settings-small-btn" onClick={handleRawToggle}>
                             {rawOpen ? 'Hide raw logs' : 'Show raw logs'}
+                        </button>
+                        <button className="settings-small-btn" onClick={handleDebugBundle}>
+                            {debugStatus || 'Copy debug bundle'}
                         </button>
                         {logs.length > 0 && <button className="settings-small-btn danger" onClick={handleClearLogs}>Clear logs</button>}
                     </div>

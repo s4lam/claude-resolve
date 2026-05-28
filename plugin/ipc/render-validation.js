@@ -75,18 +75,42 @@ function wantsTransparency(prompt, html) {
 }
 
 function hasOpaqueBodyBackground(html) {
+  return hasOpaqueSelectorBackground(html, ['html\\s*,\\s*body', 'body']);
+}
+
+function isTransparentBackgroundValue(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return (
+    normalized === 'transparent'
+    || normalized === 'none'
+    || /rgba\([^)]*,\s*0(?:\.0+)?\s*\)/.test(normalized)
+    || /#(?:0000|[0-9a-f]{6}00|[0-9a-f]{8})$/i.test(normalized)
+  );
+}
+
+function hasOpaqueSelectorBackground(html, selectors) {
+  const text = String(html || '');
+  for (const selector of selectors) {
+    const blockMatch = text.match(new RegExp(`${selector}\\s*{([^}]*)}`, 'i'));
+    if (!blockMatch) continue;
+    const backgroundMatch = blockMatch[1].match(/background(?:-color)?\s*:\s*([^;]+);?/i);
+    if (!backgroundMatch) continue;
+    if (!isTransparentBackgroundValue(backgroundMatch[1])) return true;
+  }
+  return false;
+}
+
+function hasOpaqueStageBackground(html) {
+  const selectors = ['#stage', '\\.stage', '#root', '\\.overlay', '\\.canvas'];
+  return hasOpaqueSelectorBackground(html, selectors);
+}
+
+function hasTransparentBase(html) {
   const bodyMatch = String(html || '').match(/(?:html\s*,\s*body|body)\s*{([^}]*)}/i);
   if (!bodyMatch) return false;
   const backgroundMatch = bodyMatch[1].match(/background(?:-color)?\s*:\s*([^;]+);?/i);
   if (!backgroundMatch) return false;
-
-  const value = backgroundMatch[1].trim().toLowerCase();
-  return !(
-    value === 'transparent'
-    || value === 'none'
-    || /rgba\([^)]*,\s*0(?:\.0+)?\s*\)/.test(value)
-    || /#(?:0000|[0-9a-f]{8})$/i.test(value)
-  );
+  return isTransparentBackgroundValue(backgroundMatch[1]);
 }
 
 function findMissingFileAssets(html) {
@@ -143,8 +167,13 @@ function validateOverlayHtml(input = {}) {
     addWarning(warnings, 'height-mismatch', `HTML height is ${declaredHeight}px but settings are ${expectedHeight}px.`);
   }
 
-  if (wantsTransparency(prompt, html) && hasOpaqueBodyBackground(html)) {
-    addWarning(warnings, 'transparent-mismatch', 'Prompt suggests transparency, but the page body has an opaque background.');
+  if (wantsTransparency(prompt, html)) {
+    if (!hasTransparentBase(html)) {
+      addWarning(warnings, 'transparent-base-missing', 'Prompt suggests transparency, but html/body are not explicitly transparent.');
+    }
+    if (hasOpaqueBodyBackground(html) || hasOpaqueStageBackground(html)) {
+      addWarning(warnings, 'transparent-mismatch', 'Prompt suggests transparency, but the page uses an opaque body or stage background.');
+    }
   }
 
   const missingAssets = findMissingFileAssets(html);
@@ -161,6 +190,7 @@ function validateOverlayHtml(input = {}) {
 
 module.exports = {
   findMissingFileAssets,
+  hasOpaqueStageBackground,
   parseDuration,
   validateOverlayHtml
 };

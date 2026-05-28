@@ -16,6 +16,9 @@ const { setupCaptionHandlers } = require('./ipc/captions');
 const { setupShowcaseHandlers } = require('./ipc/showcase');
 const { setupUpdateHandlers } = require('./ipc/updates');
 const { setupPreviewHandlers } = require('./ipc/preview');
+const { setupTimelineHandlers } = require('./ipc/timeline');
+const { setupVariationHandlers } = require('./ipc/variations');
+const { setupDebugHandlers } = require('./ipc/debug');
 
 let mainWindow = null;
 
@@ -48,10 +51,13 @@ app.whenReady().then(async () => {
     setupTemplateHandlers(ipcMain);
     setupAssetHandlers(ipcMain);
     setupTemplatePackHandlers(ipcMain);
-    setupCaptionHandlers(ipcMain);
-    setupShowcaseHandlers(ipcMain);
-    setupUpdateHandlers(ipcMain);
-    setupPreviewHandlers(ipcMain);
+setupCaptionHandlers(ipcMain);
+setupShowcaseHandlers(ipcMain);
+setupUpdateHandlers(ipcMain);
+setupPreviewHandlers(ipcMain);
+setupTimelineHandlers(ipcMain);
+setupVariationHandlers(ipcMain);
+setupDebugHandlers(ipcMain);
     ipcMain.handle('window:resize', (_event, { width, height }) => {
         mainWindow.setSize(width, height);
     });

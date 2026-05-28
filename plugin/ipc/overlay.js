@@ -8,9 +8,10 @@ const { getResolve, getCurrentProject } = require('./resolve');
 const { readConfig } = require('./config');
 const { validateOverlayHtml } = require('./render-validation');
 const { resolveAssetReferences } = require('./assets');
+const { createRenderQueue } = require('./render-queue');
 const {
     findExecutable, ENV,
-    RENDER_DIR, THUMBNAIL_DIR,
+    RENDER_DIR, THUMBNAIL_DIR, CONFIG_DIR,
     FFMPEG_CANDIDATES, FFMPEG_VERIFY_CMD
 } = require('./paths');
 
@@ -62,6 +63,29 @@ function writeRenderMetadata(name, metadata) {
 }
 
 let mainWindow = null;
+const RENDER_QUEUE_PATH = path.join(CONFIG_DIR, 'render-queue.json');
+
+function readQueueJobs() {
+    try {
+        const parsed = JSON.parse(fs.readFileSync(RENDER_QUEUE_PATH, 'utf8'));
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+function writeQueueJobs(jobs) {
+    fs.mkdirSync(path.dirname(RENDER_QUEUE_PATH), { recursive: true });
+    fs.writeFileSync(RENDER_QUEUE_PATH, JSON.stringify(jobs, null, 2), 'utf8');
+}
+
+const renderQueue = createRenderQueue(readQueueJobs());
+const activeRenderProcesses = new Map();
+
+function persistQueue() {
+    writeQueueJobs(renderQueue.list());
+    return renderQueue.list();
+}
 
 async function findOrCreateBin(mediaPool, binName) {
     const root = await mediaPool.GetRootFolder();
@@ -176,6 +200,8 @@ async function handleRenderMov(_event, { html, name, fps, width, height, metadat
             '--output', movPath,
             '--ffmpeg', FFMPEG_PATH
         ], { env: { ...ENV, ELECTRON_RUN_AS_NODE: '1' } });
+        const queueId = metadata?.renderQueueId;
+        if (queueId) activeRenderProcesses.set(queueId, proc);
 
         let buf = '';
         let stderrBuf = '';
@@ -200,6 +226,7 @@ async function handleRenderMov(_event, { html, name, fps, width, height, metadat
 
         proc.on('close', async (code) => {
             console.log('RENDER EXIT:', code, stderrBuf.slice(0, 500));
+            if (queueId) activeRenderProcesses.delete(queueId);
             cleanupTempDir();
             if (code !== 0) {
                 const errMsg = stderrBuf.trim().split('\n').pop() || 'Render process exited with code ' + code;
@@ -226,6 +253,7 @@ async function handleRenderMov(_event, { html, name, fps, width, height, metadat
 
         proc.on('error', (err) => {
             console.log('RENDER SPAWN ERROR:', err.message);
+            if (queueId) activeRenderProcesses.delete(queueId);
             cleanupTempDir();
             resolve({ success: false, error: 'Failed to spawn: ' + err.message });
         });
@@ -337,6 +365,26 @@ function handleValidateOverlay(_event, input) {
     return validateOverlayHtml(input);
 }
 
+function handleRenderQueue(_event, payload = {}) {
+    const action = payload.action || 'list';
+    let result = null;
+    if (action === 'enqueue') result = renderQueue.enqueue(payload.job || {});
+    else if (action === 'start') result = renderQueue.start(payload.id);
+    else if (action === 'complete') result = renderQueue.complete(payload.id, payload.result);
+    else if (action === 'fail') result = renderQueue.fail(payload.id, payload.error);
+    else if (action === 'cancel') {
+        const proc = activeRenderProcesses.get(payload.id);
+        if (proc) {
+            try { proc.kill('SIGTERM'); } catch { /* ignore */ }
+            activeRenderProcesses.delete(payload.id);
+        }
+        result = renderQueue.cancel(payload.id);
+    }
+    else if (action === 'retry') result = renderQueue.retry(payload.id);
+    else if (action === 'clearCompleted') result = { cleared: renderQueue.clearCompleted() };
+    return { success: true, action, result, jobs: persistQueue() };
+}
+
 function setupOverlayHandlers(ipcMain, win) {
     mainWindow = win;
     ipcMain.handle('overlay:renderMov', handleRenderMov);
@@ -347,6 +395,7 @@ function setupOverlayHandlers(ipcMain, win) {
     ipcMain.handle('renders:reveal', handleRevealRender);
     ipcMain.handle('renders:deleteAll', handleDeleteAllRenders);
     ipcMain.handle('renders:syncToMediaPool', handleSyncToMediaPool);
+    ipcMain.handle('renders:queue', handleRenderQueue);
 }
 
 module.exports = { setupOverlayHandlers };

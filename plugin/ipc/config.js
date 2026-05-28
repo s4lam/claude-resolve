@@ -22,8 +22,28 @@ const DEFAULTS = {
     promptPresets: [],
     savedTemplates: [],
     selectedAssetIds: [],
+    generation: {
+        variationCount: 3,
+        locks: {
+            logo: false,
+            colors: false,
+            layout: false,
+            animationOnly: false
+        }
+    },
+    captions: {
+        defaultStyle: 'clean'
+    },
+    assets: {
+        maxImportSizeMb: 25
+    },
     ui: {
-        rawLogsOpen: false
+        rawLogsOpen: false,
+        activeToolTab: 'create'
+    },
+    gallery: {
+        favorites: [],
+        recentIds: []
     }
 };
 
@@ -33,7 +53,23 @@ function mergeConfig(parsed = {}) {
         ...parsed,
         brandKit: { ...DEFAULT_BRAND_KIT, ...(parsed.brandKit || {}) },
         selectedAssetIds: Array.isArray(parsed.selectedAssetIds) ? parsed.selectedAssetIds : [],
-        ui: { ...(DEFAULTS.ui || {}), ...(parsed.ui || {}) }
+        generation: {
+            ...(DEFAULTS.generation || {}),
+            ...(parsed.generation || {}),
+            locks: {
+                ...(DEFAULTS.generation.locks || {}),
+                ...((parsed.generation || {}).locks || {})
+            }
+        },
+        captions: { ...(DEFAULTS.captions || {}), ...(parsed.captions || {}) },
+        assets: { ...(DEFAULTS.assets || {}), ...(parsed.assets || {}) },
+        ui: { ...(DEFAULTS.ui || {}), ...(parsed.ui || {}) },
+        gallery: {
+            ...(DEFAULTS.gallery || {}),
+            ...(parsed.gallery || {}),
+            favorites: Array.isArray(parsed.gallery?.favorites) ? parsed.gallery.favorites : [],
+            recentIds: Array.isArray(parsed.gallery?.recentIds) ? parsed.gallery.recentIds : []
+        }
     };
 }
 
@@ -52,7 +88,27 @@ function writeConfig(partial) {
         ...partial,
         brandKit: { ...DEFAULT_BRAND_KIT, ...(current.brandKit || {}), ...(partial.brandKit || {}) },
         selectedAssetIds: Array.isArray(partial.selectedAssetIds) ? partial.selectedAssetIds : current.selectedAssetIds,
-        ui: { ...(current.ui || {}), ...(partial.ui || {}) }
+        generation: {
+            ...(current.generation || DEFAULTS.generation),
+            ...(partial.generation || {}),
+            locks: {
+                ...((current.generation || DEFAULTS.generation).locks || {}),
+                ...((partial.generation || {}).locks || {})
+            }
+        },
+        captions: { ...(current.captions || DEFAULTS.captions), ...(partial.captions || {}) },
+        assets: { ...(current.assets || DEFAULTS.assets), ...(partial.assets || {}) },
+        ui: { ...(current.ui || {}), ...(partial.ui || {}) },
+        gallery: {
+            ...(current.gallery || DEFAULTS.gallery),
+            ...(partial.gallery || {}),
+            favorites: Array.isArray(partial.gallery?.favorites)
+                ? partial.gallery.favorites
+                : (current.gallery?.favorites || []),
+            recentIds: Array.isArray(partial.gallery?.recentIds)
+                ? partial.gallery.recentIds
+                : (current.gallery?.recentIds || [])
+        }
     };
     fs.mkdirSync(CONFIG_DIR, { recursive: true });
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));

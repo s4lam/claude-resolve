@@ -20,10 +20,12 @@ function formatAssetSize(size) {
     return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function SidebarAssetLibrary({ config, onConfigChange }) {
+export default function SidebarAssetLibrary({ config, onConfigChange, onPrompt }) {
     const [assets, setAssets] = useState([]);
     const [status, setStatus] = useState('');
     const [activeId, setActiveId] = useState(null);
+    const [activeDetails, setActiveDetails] = useState(null);
+    const [isDragging, setIsDragging] = useState(false);
     const selectedIds = useMemo(() => new Set(config.selectedAssetIds || []), [config.selectedAssetIds]);
     const selectedCount = assets.filter(asset => selectedIds.has(asset.id)).length;
     const pinnedCount = assets.filter(asset => asset.alwaysInclude).length;
@@ -49,6 +51,46 @@ export default function SidebarAssetLibrary({ config, onConfigChange }) {
         });
     }
 
+    async function refreshInspection(id = activeId) {
+        if (!id || !window.assetAPI?.inspect) {
+            setActiveDetails(null);
+            return;
+        }
+        const result = await window.assetAPI.inspect(id);
+        setActiveDetails(result?.success ? result.asset : null);
+    }
+
+    useEffect(() => {
+        refreshInspection(activeId);
+    }, [activeId]);
+
+    async function importPaths(paths) {
+        const validPaths = paths.filter(Boolean);
+        if (validPaths.length === 0) {
+            setStatus('No file paths');
+            setTimeout(() => setStatus(''), 2200);
+            return;
+        }
+        setStatus('Importing');
+        try {
+            const result = await window.assetAPI.add({ paths: validPaths });
+            const addedIds = (result?.added || []).map(asset => asset.id);
+            if (addedIds.length > 0) {
+                const next = Array.from(new Set([...(config.selectedAssetIds || []), ...addedIds]));
+                await onConfigChange({ selectedAssetIds: next });
+                setActiveId(addedIds[0]);
+                setStatus(`Imported ${addedIds.length}`);
+            } else {
+                setStatus('No supported assets');
+            }
+            await refreshAssets();
+            window.dispatchEvent(new CustomEvent('resolve-ai:assets-changed'));
+        } catch {
+            setStatus('Import failed');
+        }
+        setTimeout(() => setStatus(''), 2200);
+    }
+
     async function handleAdd() {
         setStatus('Adding');
         try {
@@ -69,10 +111,23 @@ export default function SidebarAssetLibrary({ config, onConfigChange }) {
         setTimeout(() => setStatus(''), 2200);
     }
 
+    async function handleDrop(event) {
+        event.preventDefault();
+        setIsDragging(false);
+        const paths = Array.from(event.dataTransfer?.files || []).map(file => file.path);
+        await importPaths(paths);
+    }
+
     async function handleToggle(id) {
         const next = selectedIds.has(id)
             ? (config.selectedAssetIds || []).filter(assetId => assetId !== id)
             : [...(config.selectedAssetIds || []), id];
+        await onConfigChange({ selectedAssetIds: next });
+    }
+
+    async function ensureAttached(id) {
+        if (selectedIds.has(id)) return;
+        const next = Array.from(new Set([...(config.selectedAssetIds || []), id]));
         await onConfigChange({ selectedAssetIds: next });
     }
 
@@ -83,7 +138,8 @@ export default function SidebarAssetLibrary({ config, onConfigChange }) {
 
     async function handlePatch(id, patch) {
         await window.assetAPI.update(id, patch);
-        refreshAssets();
+        await refreshAssets();
+        await refreshInspection(id);
     }
 
     async function handleDelete(id) {
@@ -94,13 +150,46 @@ export default function SidebarAssetLibrary({ config, onConfigChange }) {
         refreshAssets();
     }
 
+    async function handleExtractColors() {
+        if (!activeAsset?.id || !window.assetAPI?.extractColors) return;
+        const result = await window.assetAPI.extractColors(activeAsset.id);
+        if (result?.success && result.colors?.length) {
+            await onConfigChange({ brandKit: { ...(config.brandKit || {}), colors: result.colors.join(', ') } });
+            setStatus('Colors saved');
+        } else {
+            setStatus('No colors');
+        }
+        setTimeout(() => setStatus(''), 2200);
+    }
+
+    async function handleQuickPrompt(kind) {
+        if (!activeAsset) return;
+        await ensureAttached(activeAsset.id);
+        const prompts = {
+            logo: `Use the selected logo asset "${activeAsset.name}" as the central mark in a polished 5 second transparent title reveal. Keep the asset crisp, full size, recognizable, and do not redraw it.`,
+            background: `Use the selected image asset "${activeAsset.name}" as the main background or visual plate for a cinematic 5 second title card. Preserve the image identity and add refined motion graphics on top.`,
+            product: `Use the selected product asset "${activeAsset.name}" in a premium product reveal. Keep the product recognizable, avoid covering it with text, and create a 5 second ProRes 4444 overlay.`,
+            texture: `Use the selected texture asset "${activeAsset.name}" subtly in the background while keeping typography readable, motion refined, and the final frame polished.`
+        };
+        onPrompt?.(prompts[kind], { displayText: `Asset prompt: ${activeAsset.name}` });
+    }
+
+    const inspected = activeDetails?.id === activeAsset?.id ? activeDetails : activeAsset;
+    const health = inspected?.health || [];
+    const dimensions = inspected?.dimensions;
+
     return (
-        <div className="sb-section asset-library-section">
+        <div
+            className={'sb-section asset-library-section' + (isDragging ? ' dragging' : '')}
+            onDragOver={event => { event.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+        >
             <div className="sb-title">
                 <span>Asset Library</span>
                 <span className="sb-actions">
                     {status && <span className="sync-status">{status}</span>}
-                    <button className="sync asset-add" onClick={handleAdd}>Add</button>
+                    <button className="sync asset-add" onClick={handleAdd}>Add asset</button>
                 </span>
             </div>
 
@@ -119,6 +208,9 @@ export default function SidebarAssetLibrary({ config, onConfigChange }) {
                 </div>
             ) : (
                 <>
+                    <div className="asset-drop-zone">
+                        Drop images here or use Add asset. PNG, JPG, WEBP, SVG, and GIF stay local.
+                    </div>
                     <div className="asset-library-meta">
                         <span>{assets.length} asset{assets.length === 1 ? '' : 's'}</span>
                         <span>{selectedCount} attached</span>
@@ -140,7 +232,7 @@ export default function SidebarAssetLibrary({ config, onConfigChange }) {
                                         title="Edit asset details"
                                     >
                                         <span className="asset-row-thumb-wrap">
-                                            {asset.url
+                                            {asset.url && asset.exists
                                                 ? <img className="asset-row-thumb" src={asset.url} alt="" />
                                                 : <span className="asset-row-thumb" style={{ background: hashGradient(asset.name) }} />}
                                         </span>
@@ -216,6 +308,41 @@ export default function SidebarAssetLibrary({ config, onConfigChange }) {
                                     />
                                     <span>Always include</span>
                                 </label>
+                            </div>
+                        </div>
+                    )}
+                    {activeAsset && (
+                        <div className="asset-detail-panel">
+                            <div className="asset-detail-preview">
+                                {activeAsset.url && activeAsset.exists
+                                    ? <img src={activeAsset.url} alt="" />
+                                    : <span style={{ background: hashGradient(activeAsset.name) }} />}
+                            </div>
+                            <div className="asset-detail-meta">
+                                <div className="asset-detail-row">
+                                    <span>Path</span>
+                                    <strong title={activeAsset.path}>{activeAsset.path}</strong>
+                                </div>
+                                <div className="asset-detail-row">
+                                    <span>Details</span>
+                                    <strong>
+                                        {dimensions?.width && dimensions?.height ? `${dimensions.width}x${dimensions.height}` : 'Dimensions unknown'}
+                                        {' / '}
+                                        {formatAssetSize(activeAsset.size)}
+                                    </strong>
+                                </div>
+                                <div className="asset-health-list">
+                                    {health.map(item => (
+                                        <span className={'asset-health ' + item.severity} key={item.code}>{item.label}</span>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="asset-prompt-actions">
+                                <button className="mini-action" onClick={() => handleQuickPrompt('logo')}>Use logo as mark</button>
+                                <button className="mini-action" onClick={() => handleQuickPrompt('background')}>Use as background</button>
+                                <button className="mini-action" onClick={() => handleQuickPrompt('product')}>Product reveal</button>
+                                <button className="mini-action" onClick={() => handleQuickPrompt('texture')}>Use texture subtly</button>
+                                <button className="mini-action" onClick={handleExtractColors}>Extract colors</button>
                             </div>
                         </div>
                     )}

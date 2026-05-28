@@ -1,4 +1,5 @@
 require('./assets.test');
+require('./assets-health.test');
 require('./captions.test');
 require('./codex-args.test');
 require('./codex-parser.test');
@@ -11,5 +12,9 @@ require('./repair.test');
 require('./showcase.test');
 require('./templates.test');
 require('./template-packs.test');
+require('./template-packs-url.test');
+require('./timeline.test');
+require('./variations.test');
+require('./render-queue.test');
 
 console.log('all tests passed');

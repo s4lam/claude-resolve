@@ -1,5 +1,7 @@
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
+const https = require('https');
 const { CONFIG_DIR } = require('./paths');
 
 const BUILTIN_PACKS_PATH = path.join(__dirname, '..', 'data', 'builtin-template-packs.json');
@@ -78,6 +80,55 @@ function importTemplatePackPayload(pack, storePath = IMPORTED_PACKS_PATH) {
     return { success: true, pack };
 }
 
+function validateTemplatePackUrl(value) {
+    try {
+        const url = new URL(String(value || '').trim());
+        if (!['https:', 'http:'].includes(url.protocol)) return { ok: false, error: 'URL must use http or https' };
+        if (!url.hostname) return { ok: false, error: 'URL missing host' };
+        if (!/\.json(?:$|\?)/i.test(url.pathname + url.search)) return { ok: false, error: 'URL must point to a JSON file' };
+        return { ok: true, url: url.toString() };
+    } catch {
+        return { ok: false, error: 'Invalid URL' };
+    }
+}
+
+function fetchJson(url, maxBytes = 2 * 1024 * 1024) {
+    const client = url.startsWith('https:') ? https : http;
+    return new Promise((resolve, reject) => {
+        const request = client.get(url, { timeout: 15000 }, (response) => {
+            if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                response.resume();
+                fetchJson(new URL(response.headers.location, url).toString(), maxBytes).then(resolve, reject);
+                return;
+            }
+            if (response.statusCode !== 200) {
+                response.resume();
+                reject(new Error(`HTTP ${response.statusCode}`));
+                return;
+            }
+            let total = 0;
+            const chunks = [];
+            response.on('data', chunk => {
+                total += chunk.length;
+                if (total > maxBytes) {
+                    request.destroy(new Error('Template pack is too large'));
+                    return;
+                }
+                chunks.push(chunk);
+            });
+            response.on('end', () => {
+                try {
+                    resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+                } catch {
+                    reject(new Error('Response was not valid JSON'));
+                }
+            });
+        });
+        request.on('timeout', () => request.destroy(new Error('Request timed out')));
+        request.on('error', reject);
+    });
+}
+
 async function handleImportTemplatePack(_event, payload = {}) {
     let filePath = payload.path;
     if (!filePath) {
@@ -94,11 +145,24 @@ async function handleImportTemplatePack(_event, payload = {}) {
     return importTemplatePackPayload(pack);
 }
 
+async function handleInstallTemplatePackFromUrl(_event, payload = {}) {
+    const validation = validateTemplatePackUrl(payload.url);
+    if (!validation.ok) return { success: false, error: validation.error };
+    try {
+        const pack = await fetchJson(validation.url);
+        const result = importTemplatePackPayload(pack);
+        return result.success ? { ...result, url: validation.url } : result;
+    } catch (err) {
+        return { success: false, error: err.message || 'Failed to install template pack' };
+    }
+}
+
 function setupTemplatePackHandlers(ipcMain) {
     ipcMain.handle('gallery:list', () => loadGalleryItems());
     ipcMain.handle('gallery:use', (_event, id) => loadGalleryItems().find(item => item.id === id) || null);
     ipcMain.handle('templatePacks:validate', (_event, pack) => validateTemplatePack(pack));
     ipcMain.handle('templatePacks:import', handleImportTemplatePack);
+    ipcMain.handle('templatePacks:installFromUrl', handleInstallTemplatePackFromUrl);
 }
 
 module.exports = {
@@ -108,5 +172,6 @@ module.exports = {
     loadGalleryItems,
     setupTemplatePackHandlers,
     validateTemplate,
+    validateTemplatePackUrl,
     validateTemplatePack
 };
