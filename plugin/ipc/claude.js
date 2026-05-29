@@ -23,7 +23,10 @@ function spawnClaude() {
     const config = readConfig();
     const modelId = MODEL_IDS[config.model] || MODEL_IDS.sonnet;
 
-    claudeProcess = spawn(CLAUDE_PATH, [
+    // Quote the command: with shell:true the path is parsed by the shell, so a
+    // space in the path (e.g. a Windows username with a space) would otherwise
+    // split it. shell:true is required on Windows to run the .cmd.
+    claudeProcess = spawn(`"${CLAUDE_PATH}"`, [
         '-p',
         '--model', modelId,
         '--input-format', 'stream-json',
@@ -472,12 +475,17 @@ function handleCheckAuth() {
 
 function handleOpenLoginTerminal() {
     if (isMac) {
-        spawn('osascript', ['-e', `tell application "Terminal" to do script "${CLAUDE_PATH} login"`], {
+        // Single-quote the path inside the shell command Terminal runs, so a
+        // space in the path doesn't split the command.
+        spawn('osascript', ['-e', `tell application "Terminal" to do script "'${CLAUDE_PATH}' login"`], {
             detached: true, stdio: 'ignore'
         });
     } else {
-        spawn('cmd', ['/c', 'start', 'cmd', '/k', CLAUDE_PATH + ' login'], {
-            detached: true, shell: false, stdio: 'ignore'
+        // start "" (empty title) so a quoted path isn't taken as the window
+        // title; quote the path for spaces. windowsVerbatimArguments lets us
+        // control the exact quoting cmd sees.
+        spawn('cmd.exe', ['/c', 'start', '""', 'cmd.exe', '/k', `""${CLAUDE_PATH}" login"`], {
+            detached: true, windowsVerbatimArguments: true, stdio: 'ignore'
         });
     }
 }
