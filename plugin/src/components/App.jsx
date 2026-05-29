@@ -94,6 +94,7 @@ export default function App() {
     const [config, setConfig] = useState({
         provider: 'auto',
         model: 'sonnet',
+        effort: 'auto',
         codexModel: 'default',
         fps: 25,
         width: 1920,
@@ -542,6 +543,7 @@ export default function App() {
     async function handleConfigChange(partial) {
         const updated = await window.configAPI.set(partial);
         const modelChanged = partial.model && partial.model !== config.model;
+        const effortChanged = partial.effort && partial.effort !== config.effort;
         const codexModelChanged = partial.codexModel && partial.codexModel !== config.codexModel;
         const providerChanged = partial.provider && partial.provider !== config.provider;
         setConfig(updated);
@@ -549,7 +551,7 @@ export default function App() {
             setAuthInfo({ status: 'checking', provider: updated.provider || 'auto', label: 'AI provider' });
             (window.agentAPI || window.claudeAPI).checkAuth().then(setAuthInfo);
         }
-        if ((modelChanged || codexModelChanged || providerChanged) && !welcomed) {
+        if ((modelChanged || effortChanged || codexModelChanged || providerChanged) && !welcomed) {
             setIsProcessing(false);
             setActiveTool(null);
             setActiveProvider(null);

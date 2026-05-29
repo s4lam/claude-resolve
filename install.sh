@@ -15,6 +15,9 @@ PLUGIN_SRC="$REPO_ROOT/plugin"
 RENDERER_SRC="$PLUGIN_SRC/renderer"
 DEST_PARENT="/Library/Application Support/Blackmagic Design/DaVinci Resolve/Workflow Integration Plugins"
 DEST="$DEST_PARENT/com.clauderesolve.plugin"
+# macOS plugins dir intentionally OMITS the "Support/" segment that the
+# Windows/ProgramData path includes — this matches Blackmagic's macOS layout.
+INSTALLER_VERSION='0.5.0-beta'
 
 # ---------------------------------------------------------------- colours
 ESC=$(printf '\033')
@@ -68,6 +71,7 @@ print_header() {
         "$WARM" "$RESET" "$DIM" "$RESET"
     echo
     gradient_bar
+    printf '       %sinstaller v%s%s\n' "$DIM" "$INSTALLER_VERSION" "$RESET"
     echo
 }
 
@@ -357,7 +361,7 @@ if ! sudo mkdir -p "$DEST"; then
 fi
 
 if ! sudo ditto "$PLUGIN_SRC" "$DEST"; then
-    fail 'Could not copy plugin files into /Library.'
+    fail 'Install failed (step 7d): could not copy the plugin files into the destination.'
 fi
 ok "Installed to $DEST"
 

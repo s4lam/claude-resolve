@@ -5,13 +5,24 @@ const { readConfig } = require('./config');
 const { CLAUDE_PATH, ENV, isMac } = require('./paths');
 const { addLog } = require('./agent-logs');
 const { formatSelectedAssets } = require('./assets');
+const selectors = require('../src/data/selectors.json');
 
-const MODEL_IDS = {
-    // Claude Code resolves aliases per account/region, which is safer than
-    // pinning dated model IDs that some users may not have access to.
-    sonnet: 'sonnet',
-    opus: 'opus'
-};
+const MODEL_VALUES = new Set(selectors.models.map(m => m.value));
+const EFFORT_VALUES = new Set(selectors.effort.map(e => e.value).filter(v => v !== 'auto'));
+const DEFAULT_MODEL = 'sonnet';
+
+// Map a stored config.model to a valid --model value. Old configs only ever
+// stored an alias ('sonnet'/'opus'); fold any stale full ID back to its alias,
+// and fall back to the default for anything unrecognized.
+function normalizeModel(value) {
+    if (MODEL_VALUES.has(value)) return value;
+    if (typeof value === 'string') {
+        if (value.startsWith('claude-opus')) return 'opus';
+        if (value.startsWith('claude-sonnet')) return 'sonnet';
+        if (value.startsWith('claude-haiku')) return 'haiku';
+    }
+    return DEFAULT_MODEL;
+}
 
 let mainWindow = null;
 let claudeProcess = null;
@@ -32,17 +43,25 @@ function spawnClaude() {
     stdoutBuffer = '';
 
     const config = readConfig();
-    const modelId = MODEL_IDS[config.model] || MODEL_IDS.sonnet;
-
-    claudeProcess = spawn(CLAUDE_PATH, [
+    const args = [
         '-p',
-        '--model', modelId,
+        '--model', normalizeModel(config.model),
         '--input-format', 'stream-json',
         '--output-format', 'stream-json',
         '--verbose',
         '--permission-mode', 'acceptEdits',
         '--no-session-persistence'
-    ], {
+    ];
+    // Effort is session-level; 'auto' = don't pass the flag (use the model's
+    // adaptive default). Only forward a value this CLI build accepts.
+    if (config.effort && config.effort !== 'auto' && EFFORT_VALUES.has(config.effort)) {
+        args.push('--effort', config.effort);
+    }
+
+    // Quote the command: with shell:true the path is parsed by the shell, so a
+    // space in the path (e.g. a Windows username with a space) would otherwise
+    // split it. shell:true is required on Windows to run the .cmd.
+    claudeProcess = spawn(`"${CLAUDE_PATH}"`, args, {
         shell: true,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: ENV
@@ -497,12 +516,17 @@ function handleCheckAuth() {
 
 function handleOpenLoginTerminal() {
     if (isMac) {
-        spawn('osascript', ['-e', `tell application "Terminal" to do script "${CLAUDE_PATH} login"`], {
+        // Single-quote the path inside the shell command Terminal runs, so a
+        // space in the path doesn't split the command.
+        spawn('osascript', ['-e', `tell application "Terminal" to do script "'${CLAUDE_PATH}' login"`], {
             detached: true, stdio: 'ignore'
         });
     } else {
-        spawn('cmd', ['/c', 'start', 'cmd', '/k', CLAUDE_PATH + ' login'], {
-            detached: true, shell: false, stdio: 'ignore'
+        // start "" (empty title) so a quoted path isn't taken as the window
+        // title; quote the path for spaces. windowsVerbatimArguments lets us
+        // control the exact quoting cmd sees.
+        spawn('cmd.exe', ['/c', 'start', '""', 'cmd.exe', '/k', `""${CLAUDE_PATH}" login"`], {
+            detached: true, windowsVerbatimArguments: true, stdio: 'ignore'
         });
     }
 }

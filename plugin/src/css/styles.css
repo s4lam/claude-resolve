@@ -2716,17 +2716,24 @@ body, #root {
 
 .card-preview {
     position: relative;
-    aspect-ratio: var(--aspect-video);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     overflow: hidden;
     background: var(--gradient-preview);
 }
+.card-preview-box {
+    position: relative;
+    flex: none;
+    overflow: hidden;
+}
 .card-preview-frame {
     position: absolute;
-    left: 50%;
-    top: 50%;
+    left: 0;
+    top: 0;
     border: 0;
     display: block;
-    transform-origin: center center;
+    transform-origin: top left;
     background: transparent;
 }
 .card-play {

@@ -11,7 +11,7 @@ const { extensionForRenderSettings, normalizeRenderSettings, proxyPathFor } = re
 const { resolveAssetReferences } = require('./assets');
 const { createRenderQueue } = require('./render-queue');
 const {
-    findExecutable, ENV, NODE_PATH,
+    findExecutable, ENV, NODE_PATH, PLAYWRIGHT_BROWSERS_PATH,
     RENDER_DIR, THUMBNAIL_DIR, CONFIG_DIR,
     FFMPEG_CANDIDATES, FFMPEG_VERIFY_CMD
 } = require('./paths');
@@ -218,8 +218,8 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
             ] : [])
         ], {
             env: usingElectronAsNode
-                ? { ...ENV, ELECTRON_RUN_AS_NODE: '1' }
-                : ENV
+                ? { ...ENV, ELECTRON_RUN_AS_NODE: '1', PLAYWRIGHT_BROWSERS_PATH }
+                : { ...ENV, PLAYWRIGHT_BROWSERS_PATH }
         });
         const queueId = metadata?.renderQueueId;
         if (queueId) activeRenderProcesses.set(queueId, proc);

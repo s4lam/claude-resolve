@@ -56,8 +56,13 @@ const CLAUDE_CANDIDATES = [
     path.join(os.homedir(), '.claude', 'local', 'claude'),
     path.join(os.homedir(), '.npm-global', 'bin', 'claude'),
     path.join(os.homedir(), '.bun', 'bin', 'claude'),
+    path.join(os.homedir(), '.volta', 'bin', 'claude'),
+    path.join(os.homedir(), '.local', 'bin', 'claude'),
     'claude'
 ];
+// nvm / fnm install global bins under version-specific dirs the static list
+// can't enumerate — the login+interactive shell probe sources the user's rc
+// and so resolves those.
 const CLAUDE_VERIFY_CMD = "zsh -lic 'command -v claude' 2>/dev/null";
 
 const CODEX_CANDIDATES = isMac
@@ -67,21 +72,34 @@ const CODEX_CANDIDATES = isMac
         path.join(os.homedir(), '.codex', 'local', 'codex'),
         path.join(os.homedir(), '.npm-global', 'bin', 'codex'),
         path.join(os.homedir(), '.bun', 'bin', 'codex'),
+        path.join(os.homedir(), '.volta', 'bin', 'codex'),
+        path.join(os.homedir(), '.local', 'bin', 'codex'),
         'codex'
     ]
     : [
         path.join(process.env.APPDATA || '', 'npm', 'codex.cmd'),
+        path.join(process.env.LOCALAPPDATA || '', 'npm', 'codex.cmd'),
         path.join(process.env.APPDATA || '', 'npm', 'codex'),
+        path.join(os.homedir(), '.volta', 'bin', 'codex.exe'),
         'codex.cmd',
         'codex'
     ];
 const CODEX_VERIFY_CMD = isMac ? "zsh -lic 'command -v codex' 2>/dev/null" : 'where codex';
 
-// Windows keeps the known npm install path (GUI apps inherit a usable PATH
-// and %APPDATA% there). Only macOS needs the resolver.
+// Resolve per-OS. macOS uses the login-shell probe + candidates (launchd strips
+// PATH). Windows GUI apps inherit a usable PATH, but a custom npm prefix / fnm /
+// Volta can move the CLI off the default %APPDATA%\npm path, so try `where
+// claude` plus a candidate list there too.
+const WIN_CLAUDE_CANDIDATES = [
+    path.join(process.env.APPDATA || '', 'npm', 'claude.cmd'),
+    path.join(process.env.LOCALAPPDATA || '', 'npm', 'claude.cmd'),
+    path.join(os.homedir(), '.volta', 'bin', 'claude.exe'),
+    path.join(os.homedir(), '.claude', 'local', 'claude.exe'),
+    'claude.cmd'
+];
 const CLAUDE_PATH = isMac
     ? findExecutable(CLAUDE_CANDIDATES, CLAUDE_VERIFY_CMD)
-    : path.join(process.env.APPDATA || '', 'npm', 'claude.cmd');
+    : findExecutable(WIN_CLAUDE_CANDIDATES, 'where claude 2>nul');
 
 function findCodexPath() {
     const found = findExecutable(CODEX_CANDIDATES, CODEX_VERIFY_CMD);
@@ -102,11 +120,14 @@ const NODE_CANDIDATES = isMac
         '/usr/bin/node',
         path.join(os.homedir(), '.npm-global', 'bin', 'node'),
         path.join(os.homedir(), '.nvm', 'current', 'bin', 'node'),
+        path.join(os.homedir(), '.volta', 'bin', 'node'),
+        path.join(os.homedir(), '.local', 'bin', 'node'),
         'node'
     ]
     : [
         path.join(process.env.PROGRAMFILES || '', 'nodejs', 'node.exe'),
         path.join(process.env['ProgramFiles(x86)'] || '', 'nodejs', 'node.exe'),
+        path.join(os.homedir(), '.volta', 'bin', 'node.exe'),
         'node.exe',
         'node'
     ];
@@ -147,10 +168,25 @@ const FFMPEG_CANDIDATES = isMac
     : [
         path.join(process.env.PROGRAMFILES || '', 'FFmpeg', 'ffmpeg.exe'),
         path.join(process.env.PROGRAMFILES || '', 'FFmpeg', 'bin', 'ffmpeg.exe'),
+        // ProgramW6432 = native Program Files even from a 32-bit process.
+        path.join(process.env.ProgramW6432 || '', 'FFmpeg', 'bin', 'ffmpeg.exe'),
+        // winget shim + scoop shim (choco/PATH installs are caught by `where`).
+        path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Links', 'ffmpeg.exe'),
+        path.join(os.homedir(), 'scoop', 'shims', 'ffmpeg.exe'),
         'ffmpeg'
     ];
 
-const FFMPEG_VERIFY_CMD = isMac ? 'which ffmpeg' : 'where ffmpeg';
+// macOS: a login+interactive shell sees Homebrew/nvm PATHs that launchd's
+// stripped PATH (and a plain `which`) would miss — match the claude probe.
+const FFMPEG_VERIFY_CMD = isMac
+    ? "zsh -lic 'command -v ffmpeg' 2>/dev/null"
+    : 'where ffmpeg';
+
+// Playwright browser cache. Pin it so install-time and run-time resolve the
+// SAME per-user location (these values match Playwright's per-OS default).
+const PLAYWRIGHT_BROWSERS_PATH = isMac
+    ? path.join(os.homedir(), 'Library', 'Caches', 'ms-playwright')
+    : path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'ms-playwright');
 
 module.exports = {
     isMac,
@@ -164,5 +200,6 @@ module.exports = {
     CONFIG_DIR,
     ASSET_DIR,
     FFMPEG_CANDIDATES,
-    FFMPEG_VERIFY_CMD
+    FFMPEG_VERIFY_CMD,
+    PLAYWRIGHT_BROWSERS_PATH
 };

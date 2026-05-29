@@ -35,6 +35,9 @@ On macOS, if it's older than 18, upgrade with `brew install node` (latest) or `f
 ### macOS
 1. Download or clone the repo
 2. Double-click `install.command`
+   - **"unidentified developer"?** Right-click `install.command` → **Open**, then confirm.
+   - **Double-click does nothing / "permission denied"?** A ZIP download strips the executable bit. Open Terminal in the repo folder and run `bash install.command` (it restores the bit), or `chmod +x install.command`.
+   - **Still blocked by Gatekeeper?** Clear the quarantine flag in the repo folder: `xattr -dr com.apple.quarantine .`
 3. Restart DaVinci Resolve
 
 The installer checks for DaVinci Resolve and Node.js, installs the renderer's dependencies (Playwright + Chromium), lets you choose Codex CLI or Claude Code if no supported AI CLI is found, and copies the plugin into Resolve. After installing, open the plugin from **Workspace > Workflow Integration > Resolve AI**.

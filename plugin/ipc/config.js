@@ -15,6 +15,7 @@ const DEFAULT_BRAND_KIT = {
 const DEFAULTS = {
     provider: 'auto',
     model: 'sonnet',
+    effort: 'auto',
     codexModel: 'default',
     fps: 25,
     width: 1920,

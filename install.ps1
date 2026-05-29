@@ -1,8 +1,9 @@
 #Requires -Version 5.1
 <#
   Resolve AI - Windows installer.
-  Launched by install.bat (which elevates) or run directly from an
-  elevated PowerShell prompt.
+  Launched by install.bat as the CURRENT user (no up-front elevation). Node,
+  npm, AI CLIs, and Playwright run in the user's profile; only the final plugin
+  copy into ProgramData is elevated (see Copy-Plugin).
 #>
 
 # ---------------------------------------------------------------- console
@@ -83,6 +84,7 @@ function Show-Header {
     Write-Host '       AI motion graphics for DaVinci Resolve' -ForegroundColor DarkGray
     Write-Host ''
     Show-Bar
+    Write-Host "       installer v$InstallerVersion" -ForegroundColor DarkGray
     Write-Host ''
 }
 
@@ -140,10 +142,44 @@ function Show-Success {
 }
 
 # ---------------------------------------------------------------- paths
-$RepoRoot    = $PSScriptRoot
-$PluginSrc   = Join-Path $RepoRoot 'plugin'
-$RendererSrc = Join-Path $PluginSrc 'renderer'
-$Dest        = Join-Path $env:ProgramData 'Blackmagic Design\DaVinci Resolve\Support\Workflow Integration Plugins\com.clauderesolve.plugin'
+$RepoRoot         = $PSScriptRoot
+$PluginSrc        = Join-Path $RepoRoot 'plugin'
+$RendererSrc      = Join-Path $PluginSrc 'renderer'
+# Windows/ProgramData path includes the "Support" segment (the macOS path omits
+# it) — this matches Blackmagic's per-platform layout. Do not "sync" the two.
+$Dest             = Join-Path $env:ProgramData 'Blackmagic Design\DaVinci Resolve\Support\Workflow Integration Plugins\com.clauderesolve.plugin'
+$InstallerVersion = '0.5.0-beta'
+
+# Elevate ONLY the plugin copy: everything else runs as the invoking user so
+# Node/npm-global, the Claude CLI + login, and the Playwright Chromium cache
+# land in the USER profile (mirrors the macOS drop-root model). ProgramData
+# needs admin to write, so the copy runs in a minimal elevated child.
+function Test-Admin {
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    (New-Object Security.Principal.WindowsPrincipal $id).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+function Copy-Plugin {
+    $destLit = "'" + ($Dest -replace "'", "''") + "'"
+    $srcLit  = "'" + ($PluginSrc -replace "'", "''") + "'"
+    $payload = @"
+`$ErrorActionPreference = 'Stop'
+if (Test-Path -LiteralPath $destLit) { Remove-Item -LiteralPath $destLit -Recurse -Force }
+New-Item -ItemType Directory -Path $destLit -Force | Out-Null
+Copy-Item -Path (Join-Path $srcLit '*') -Destination $destLit -Recurse -Force
+"@
+    if (Test-Admin) {
+        try { & ([scriptblock]::Create($payload)); return $true } catch { return $false }
+    }
+    $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($payload))
+    try {
+        $p = Start-Process powershell -Verb RunAs -Wait -PassThru -ArgumentList @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $enc)
+        return ($p.ExitCode -eq 0)
+    } catch {
+        return $false   # user declined the UAC prompt
+    }
+}
 
 Show-Header
 
@@ -153,18 +189,18 @@ $resolveExe = Join-Path $env:ProgramFiles 'Blackmagic Design\DaVinci Resolve\Res
 if (-not (Test-Path $resolveExe)) {
     Fail 'DaVinci Resolve not found. Install DaVinci Resolve Studio 21+ first.'
 }
-if (Get-Process -Name 'Resolve' -ErrorAction SilentlyContinue) {
+if (Get-Process -Name 'Resolve', 'DaVinci Resolve Welcome' -ErrorAction SilentlyContinue) {
     Warn 'DaVinci Resolve is running. Save your work first.'
     $answer = Read-Host '       Close Resolve and continue? (y/n)'
     if ($answer -match '^(y|yes)$') {
-        $proc = Get-Process -Name 'Resolve' -ErrorAction SilentlyContinue
+        $proc = Get-Process -Name 'Resolve', 'DaVinci Resolve Welcome' -ErrorAction SilentlyContinue
         if ($proc) {
             $proc.CloseMainWindow() | Out-Null
             for ($i = 0; $i -lt 10; $i++) {
                 Start-Sleep -Milliseconds 800
-                if (-not (Get-Process -Name 'Resolve' -ErrorAction SilentlyContinue)) { break }
+                if (-not (Get-Process -Name 'Resolve', 'DaVinci Resolve Welcome' -ErrorAction SilentlyContinue)) { break }
             }
-            Get-Process -Name 'Resolve' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Get-Process -Name 'Resolve', 'DaVinci Resolve Welcome' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         }
         Ok 'Resolve closed.'
     } else {
@@ -216,9 +252,12 @@ function Install-Node {
     # Strategy 1 - winget (present on Windows 10 21H2+ / Windows 11).
     # The OpenJS.NodeJS.LTS package already tracks the current LTS.
     if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Warn 'Installing Node.js via winget...'
-        & winget install --id OpenJS.NodeJS.LTS --silent `
-            --accept-source-agreements --accept-package-agreements
+        Warn 'Installing Node.js via winget (administrator approval may be requested)...'
+        try {
+            Start-Process winget -Verb RunAs -Wait -ArgumentList @(
+                'install', '--id', 'OpenJS.NodeJS.LTS', '--silent',
+                '--accept-source-agreements', '--accept-package-agreements')
+        } catch {}
         Sync-Path
         if ((Get-NodeMajor) -ge 18) { return $true }
         Warn 'winget install did not produce a usable Node.js - trying the official MSI.'
@@ -243,8 +282,8 @@ function Install-Node {
         $ProgressPreference = 'SilentlyContinue'
         Invoke-WebRequest -Uri $msiUrl -OutFile $msiPath -UseBasicParsing
         $ProgressPreference = $oldPref
-        Warn 'Running the Node.js installer...'
-        $p = Start-Process msiexec.exe -ArgumentList @(
+        Warn 'Running the Node.js installer (administrator approval may be requested)...'
+        $p = Start-Process msiexec.exe -Verb RunAs -ArgumentList @(
             '/i', "`"$msiPath`"", '/qn', '/norestart'
         ) -Wait -PassThru
         Remove-Item $msiPath -Force -ErrorAction SilentlyContinue
@@ -401,6 +440,9 @@ Ok 'Built-in template packs present.'
 
 # 5 - Chromium
 Step 5 'Downloading Playwright Chromium'
+# Pin the browser cache to this user's profile so install-time and run-time
+# (the plugin runs as the logged-in user inside Resolve) always agree.
+$env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $env:LOCALAPPDATA 'ms-playwright'
 Push-Location $RendererSrc
 & npx --yes playwright install chromium
 $exit = $LASTEXITCODE
@@ -413,17 +455,16 @@ Step 6 'Checking ffmpeg'
 if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
     Ok 'ffmpeg found.'
 } else {
-    Warn 'ffmpeg not found on PATH. Rendering needs ffmpeg installed and on PATH.'
+    Warn 'ffmpeg not found on PATH. Install it (e.g. winget install Gyan.FFmpeg, or choco install ffmpeg), then reopen your terminal.'
 }
 
-# 7 - Copy plugin into DaVinci Resolve
+# 7 - Copy plugin into DaVinci Resolve (elevated — the only step that needs admin)
 Step 7 'Installing plugin into DaVinci Resolve'
-try {
-    if (Test-Path $Dest) { Remove-Item -LiteralPath $Dest -Recurse -Force -ErrorAction Stop }
-    New-Item -ItemType Directory -Path $Dest -Force -ErrorAction Stop | Out-Null
-    Copy-Item -Path (Join-Path $PluginSrc '*') -Destination $Dest -Recurse -Force -ErrorAction Stop
-} catch {
-    Fail "Could not copy plugin files: $($_.Exception.Message)"
+if (-not (Test-Admin)) {
+    Write-Host '       (Windows will ask for administrator approval to copy the plugin)' -ForegroundColor DarkGray
+}
+if (-not (Copy-Plugin)) {
+    Fail 'Could not copy the plugin into DaVinci Resolve (the administrator prompt may have been declined, or the copy failed).'
 }
 Ok "Installed to $Dest"
 

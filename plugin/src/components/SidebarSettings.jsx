@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import SELECTORS from '../data/selectors.json';
 
 const STATUS_LABELS = {
     ready: 'Ready',
@@ -275,7 +276,8 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
     }
 
     const provider = config.provider || 'auto';
-    const modelValue = provider === 'codex' ? (config.codexModel || 'default') : (config.model || 'sonnet');
+    const claudeModelValue = SELECTORS.models.some(m => m.value === config.model) ? config.model : 'sonnet';
+    const modelValue = provider === 'codex' ? (config.codexModel || 'default') : claudeModelValue;
     const activeProvider = health?.activeProvider || provider;
     const activeModel = health?.activeModel || modelValue;
     const versionText = update?.current ? `v${update.current}` : 'Resolve AI';
@@ -347,13 +349,26 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
                                     <option value="gpt-5.5">GPT-5.5</option>
                                 </>
                             ) : (
-                                <>
-                                    <option value="sonnet">Sonnet · fast</option>
-                                    <option value="opus">Opus · smart</option>
-                                </>
+                                SELECTORS.models.map(m => (
+                                    <option key={m.value} value={m.value}>{m.label} · {m.sub}</option>
+                                ))
                             )}
                         </select>
                     </SettingRow>
+
+                    {provider !== 'codex' && (
+                        <SettingRow label="Effort" help="Claude reasoning effort. Auto uses the CLI default.">
+                            <select
+                                className="select"
+                                value={SELECTORS.effort.some(e => e.value === config.effort) ? config.effort : 'auto'}
+                                onChange={e => onConfigChange({ effort: e.target.value })}
+                            >
+                                {SELECTORS.effort.map(e => (
+                                    <option key={e.value} value={e.value}>{e.label}</option>
+                                ))}
+                            </select>
+                        </SettingRow>
+                    )}
 
                 </SettingsSection>
 

@@ -107,6 +107,7 @@ function canvasFitScript(width, height) {
 }
 
 const REPLAY_BUFFER_MS = 500;
+const MAX_PREVIEW_H = 420;
 
 function numericDimension(value, fallback) {
     const parsed = Number(value);
@@ -116,7 +117,7 @@ function numericDimension(value, fallback) {
 const HTMLPreview = memo(function HTMLPreview({ parsed, selectedAssetIds, width = 1920, height = 1080 }) {
     const iframeRef = useRef(null);
     const containerRef = useRef(null);
-    const [scale, setScale] = useState(1);
+    const [box, setBox] = useState({ w: 0, h: 0, scale: 1 });
     const [isPlaying, setIsPlaying] = useState(true);
     const [bundle, setBundle] = useState(cachedBundle);
     const [replayKey, setReplayKey] = useState(0);
@@ -150,15 +151,20 @@ const HTMLPreview = memo(function HTMLPreview({ parsed, selectedAssetIds, width 
     }, [resolvedHtml, bundle]);
 
     useEffect(() => {
-        function updateScale() {
-            if (containerRef.current) {
-                const box = containerRef.current.getBoundingClientRect();
-                const nextScale = Math.min(box.width / canvasWidth, box.height / canvasHeight);
-                setScale(Number.isFinite(nextScale) && nextScale > 0 ? nextScale : 1);
+        function updateBox() {
+            const availW = containerRef.current?.clientWidth;
+            if (!availW) return;
+            const aspect = canvasWidth / canvasHeight;
+            let w = availW;
+            let h = w / aspect;
+            if (h > MAX_PREVIEW_H) {
+                h = MAX_PREVIEW_H;
+                w = h * aspect;
             }
+            setBox({ w, h, scale: w / canvasWidth });
         }
-        updateScale();
-        const obs = new ResizeObserver(updateScale);
+        updateBox();
+        const obs = new ResizeObserver(updateBox);
         if (containerRef.current) obs.observe(containerRef.current);
         return () => obs.disconnect();
     }, [canvasWidth, canvasHeight]);
@@ -236,25 +242,31 @@ const HTMLPreview = memo(function HTMLPreview({ parsed, selectedAssetIds, width 
     }
 
     return (
-        <div ref={containerRef} className="card-preview">
-            <iframe
-                key={replayKey}
-                ref={iframeRef}
-                className="card-preview-frame"
-                width={canvasWidth}
-                height={canvasHeight}
-                sandbox="allow-scripts"
-                srcDoc={srcdoc}
-                style={{ transform: `translate(-50%, -50%) scale(${scale})` }}
-            />
-            {parsed.mode !== 'realtime' && (
-                <button
-                    className={'card-play' + (isPlaying ? '' : ' play-glyph')}
-                    onClick={togglePlay}
-                >
-                    {isPlaying ? '⏸' : '▶'}
-                </button>
-            )}
+        <div
+            ref={containerRef}
+            className="card-preview"
+            style={{ height: box.h ? `${box.h}px` : undefined }}
+        >
+            <div className="card-preview-box" style={{ width: `${box.w}px`, height: `${box.h}px` }}>
+                <iframe
+                    key={replayKey}
+                    ref={iframeRef}
+                    className="card-preview-frame"
+                    width={canvasWidth}
+                    height={canvasHeight}
+                    sandbox="allow-scripts"
+                    srcDoc={srcdoc}
+                    style={{ transform: `scale(${box.scale})` }}
+                />
+                {parsed.mode !== 'realtime' && (
+                    <button
+                        className={'card-play' + (isPlaying ? '' : ' play-glyph')}
+                        onClick={togglePlay}
+                    >
+                        {isPlaying ? '⏸' : '▶'}
+                    </button>
+                )}
+            </div>
         </div>
     );
 });

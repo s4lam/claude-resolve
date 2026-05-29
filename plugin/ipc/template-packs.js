@@ -2,10 +2,13 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const https = require('https');
+const dns = require('dns').promises;
+const net = require('net');
 const { CONFIG_DIR } = require('./paths');
 
 const BUILTIN_PACKS_PATH = path.join(__dirname, '..', 'data', 'builtin-template-packs.json');
 const IMPORTED_PACKS_PATH = path.join(CONFIG_DIR, 'imported-template-packs.json');
+const MAX_REDIRECTS = 5;
 
 function isSafeTemplateHtml(html) {
     const text = String(html || '');
@@ -80,11 +83,62 @@ function importTemplatePackPayload(pack, storePath = IMPORTED_PACKS_PATH) {
     return { success: true, pack };
 }
 
+function normalizeHostname(hostname) {
+    return String(hostname || '').trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+}
+
+function isPrivateIPv4(address) {
+    const parts = String(address).split('.').map(Number);
+    if (parts.length !== 4 || parts.some(part => !Number.isInteger(part) || part < 0 || part > 255)) return true;
+    const [a, b] = parts;
+    return a === 0
+        || a === 10
+        || a === 127
+        || (a === 100 && b >= 64 && b <= 127)
+        || (a === 169 && b === 254)
+        || (a === 172 && b >= 16 && b <= 31)
+        || (a === 192 && b === 168)
+        || (a === 198 && (b === 18 || b === 19))
+        || a >= 224;
+}
+
+function isPrivateIPv6(address) {
+    const value = normalizeHostname(address);
+    if (value.startsWith('::ffff:')) return isPrivateIPv4(value.slice(7));
+    return value === '::'
+        || value === '::1'
+        || value.startsWith('fc')
+        || value.startsWith('fd')
+        || value.startsWith('fe8')
+        || value.startsWith('fe9')
+        || value.startsWith('fea')
+        || value.startsWith('feb')
+        || value.startsWith('ff');
+}
+
+function isBlockedNetworkAddress(address) {
+    const value = normalizeHostname(address);
+    const family = net.isIP(value);
+    if (family === 4) return isPrivateIPv4(value);
+    if (family === 6) return isPrivateIPv6(value);
+    return false;
+}
+
+function isBlockedHostname(hostname) {
+    const host = normalizeHostname(hostname);
+    if (!host) return true;
+    if (host === 'localhost' || host.endsWith('.localhost')) return true;
+    if (host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.lan')) return true;
+    return isBlockedNetworkAddress(host);
+}
+
 function validateTemplatePackUrl(value) {
     try {
         const url = new URL(String(value || '').trim());
         if (!['https:', 'http:'].includes(url.protocol)) return { ok: false, error: 'URL must use http or https' };
         if (!url.hostname) return { ok: false, error: 'URL missing host' };
+        if (url.username || url.password) return { ok: false, error: 'URL must not include credentials' };
+        if (isBlockedHostname(url.hostname)) return { ok: false, error: 'URL host is not allowed' };
         if (!/\.json(?:$|\?)/i.test(url.pathname + url.search)) return { ok: false, error: 'URL must point to a JSON file' };
         return { ok: true, url: url.toString() };
     } catch {
@@ -92,13 +146,33 @@ function validateTemplatePackUrl(value) {
     }
 }
 
-function fetchJson(url, maxBytes = 2 * 1024 * 1024) {
-    const client = url.startsWith('https:') ? https : http;
+async function assertPublicRemoteUrl(url) {
+    if (isBlockedHostname(url.hostname)) throw new Error('URL host is not allowed');
+    const hostname = normalizeHostname(url.hostname);
+    if (net.isIP(hostname)) return;
+    const addresses = await dns.lookup(hostname, { all: true, verbatim: true });
+    if (!addresses.length) throw new Error('URL host could not be resolved');
+    if (addresses.some(entry => isBlockedNetworkAddress(entry.address))) {
+        throw new Error('URL resolves to a private or local network address');
+    }
+}
+
+async function fetchJson(url, maxBytes = 2 * 1024 * 1024, redirectsRemaining = MAX_REDIRECTS) {
+    const validation = validateTemplatePackUrl(url);
+    if (!validation.ok) throw new Error(validation.error);
+    const parsedUrl = new URL(validation.url);
+    await assertPublicRemoteUrl(parsedUrl);
+    const client = parsedUrl.protocol === 'https:' ? https : http;
     return new Promise((resolve, reject) => {
-        const request = client.get(url, { timeout: 15000 }, (response) => {
+        const request = client.get(parsedUrl, { timeout: 15000 }, (response) => {
             if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
                 response.resume();
-                fetchJson(new URL(response.headers.location, url).toString(), maxBytes).then(resolve, reject);
+                if (redirectsRemaining <= 0) {
+                    reject(new Error('Too many redirects'));
+                    return;
+                }
+                const nextUrl = new URL(response.headers.location, parsedUrl).toString();
+                fetchJson(nextUrl, maxBytes, redirectsRemaining - 1).then(resolve, reject);
                 return;
             }
             if (response.statusCode !== 200) {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import SELECTORS from '../data/selectors.json';
 
 const TOOL_LABELS = {
     Read: 'Reading',
@@ -19,8 +20,10 @@ function shortPath(p) {
 }
 
 const MODEL_LABELS = {
+    ...Object.fromEntries(SELECTORS.models.map(m => [m.value, m.label])),
     sonnet: 'Sonnet',
     opus: 'Opus',
+    haiku: 'Haiku',
     default: 'Codex default',
     'gpt-5.3-codex': 'GPT-5.3 Codex',
     'gpt-5.4-mini': 'GPT-5.4 Mini',
