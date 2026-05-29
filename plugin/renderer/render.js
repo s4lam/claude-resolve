@@ -219,6 +219,15 @@ function parseArgs(argv) {
 async function main() {
     const args = parseArgs(process.argv.slice(2));
 
+    // Resolve runs this under its bundled Electron as Node (ELECTRON_RUN_AS_NODE).
+    // Playwright needs Node 18+ — fail with a clear message instead of a cryptic
+    // module-load error if that runtime is too old.
+    const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
+    if (!Number.isFinite(nodeMajor) || nodeMajor < 18) {
+        emit({ type: 'error', message: `Renderer needs Node 18+, but the bundled runtime is Node ${process.versions.node}.` });
+        process.exit(1);
+    }
+
     if (!args.htmlPath) {
         emit({ type: 'error', message: 'Missing HTML path argument' });
         process.exit(1);

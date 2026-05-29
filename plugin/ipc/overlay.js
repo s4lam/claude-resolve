@@ -7,7 +7,7 @@ const { spawn } = require('child_process');
 const { getResolve, getCurrentProject } = require('./resolve');
 const { readConfig } = require('./config');
 const {
-    findExecutable, ENV,
+    findExecutable, ENV, PLAYWRIGHT_BROWSERS_PATH,
     RENDER_DIR, THUMBNAIL_DIR,
     FFMPEG_CANDIDATES, FFMPEG_VERIFY_CMD
 } = require('./paths');
@@ -135,7 +135,7 @@ async function handleRenderMov(_event, { html, name, fps, width, height }) {
             '--height', String(height),
             '--output', movPath,
             '--ffmpeg', FFMPEG_PATH
-        ], { env: { ...ENV, ELECTRON_RUN_AS_NODE: '1' } });
+        ], { env: { ...ENV, ELECTRON_RUN_AS_NODE: '1', PLAYWRIGHT_BROWSERS_PATH } });
 
         let buf = '';
         let stderrBuf = '';
