@@ -75,9 +75,9 @@ print_header() {
 }
 
 step() {  # $1 = step number, $2 = title
-    local col; col="$(grad $(( ($1 - 1) * 100 / 9 )))"
+    local col; col="$(grad $(( ($1 - 1) * 100 / 8 )))"
     echo
-    printf '%s[%s/10]%s  %s%s%s\n' "${ESC}[38;2;${col}m" "$1" "$RESET" "$WHITE" "$2" "$RESET"
+    printf '%s[%s/9]%s  %s%s%s\n' "${ESC}[38;2;${col}m" "$1" "$RESET" "$WHITE" "$2" "$RESET"
 }
 ok()   { printf '       %s  %s%s%s\n' "$I_OK"   "$DIM"   "$1" "$RESET"; }
 warn() { printf '       %s  %s%s%s\n' "$I_WARN" "$DIM"   "$1" "$RESET"; }
@@ -231,23 +231,16 @@ if ! ( cd "$RENDERER_SRC" && npx --yes playwright install chromium ); then
 fi
 ok 'Chromium installed.'
 
-# 6 - Build the plugin UI (model: dist is built at install time, not committed)
-step 6 'Building the plugin UI'
-if ! ( cd "$PLUGIN_SRC" && npm install --no-audit --no-fund && npm run build ); then
-    fail 'Failed to build the plugin UI (npm install / vite build in plugin/).'
-fi
-ok 'UI built.'
-
-# 7 - ffmpeg
-step 7 'Checking ffmpeg'
+# 6 - ffmpeg
+step 6 'Checking ffmpeg'
 if command -v ffmpeg >/dev/null 2>&1; then
     ok 'ffmpeg found.'
 else
     warn 'ffmpeg not found on PATH. Rendering needs ffmpeg (brew install ffmpeg).'
 fi
 
-# 8 - Copy plugin into DaVinci Resolve (needs root)
-step 8 'Installing plugin into DaVinci Resolve'
+# 7 - Copy plugin into DaVinci Resolve (needs root)
+step 7 'Installing plugin into DaVinci Resolve'
 printf '       %s(your administrator password may be requested)%s\n' "$DIM" "$RESET"
 
 # A FILE squatting where a directory must be (from a prior bad install) makes
@@ -257,22 +250,22 @@ printf '       %s(your administrator password may be requested)%s\n' "$DIM" "$RE
 PARENT="$(dirname "$DEST")"
 if [ -e "$DEST" ] && [ ! -d "$DEST" ]; then
     sudo rm -f "$DEST" \
-        || fail "Install failed (step 8a): could not remove a file blocking $DEST."
+        || fail "Install failed (step 7a): could not remove a file blocking $DEST."
 fi
 if [ -e "$PARENT" ] && [ ! -d "$PARENT" ]; then
     sudo rm -f "$PARENT" \
-        || fail "Install failed (step 8a): could not remove a file blocking $PARENT."
+        || fail "Install failed (step 7a): could not remove a file blocking $PARENT."
 fi
 sudo rm -rf "$DEST" \
-    || fail 'Install failed (step 8b): could not remove the previous plugin at the destination.'
+    || fail 'Install failed (step 7b): could not remove the previous plugin at the destination.'
 sudo mkdir -p "$DEST" \
-    || fail 'Install failed (step 8c): could not create the plugin destination folder.'
+    || fail 'Install failed (step 7c): could not create the plugin destination folder.'
 sudo cp -R "$PLUGIN_SRC/." "$DEST/" \
-    || fail 'Install failed (step 8d): could not copy the plugin files into the destination.'
+    || fail 'Install failed (step 7d): could not copy the plugin files into the destination.'
 ok "Installed to $DEST"
 
-# 9 - Verify
-step 9 'Verifying installation'
+# 8 - Verify
+step 8 'Verifying installation'
 for rel in manifest.xml main.js dist/index.html renderer/render.js renderer/node_modules/playwright; do
     if [ ! -e "$DEST/$rel" ]; then
         fail "Verification failed - missing: $rel"
@@ -280,7 +273,7 @@ for rel in manifest.xml main.js dist/index.html renderer/render.js renderer/node
 done
 ok 'All required files present.'
 
-# 10 - Done
-step 10 'Done'
+# 9 - Done
+step 9 'Done'
 print_success
 read -r -p "       Press Enter to exit..." _

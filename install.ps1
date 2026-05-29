@@ -90,9 +90,9 @@ function Show-Header {
 
 function Step([int]$n, [string]$msg) {
     Write-Host ''
-    $tag = "[$n/10]"
+    $tag = "[$n/9]"
     if ($Ansi) {
-        Write-Host (Tint (GradientAt ([double]($n - 1) / 9)) $tag) -NoNewline
+        Write-Host (Tint (GradientAt ([double]($n - 1) / 8)) $tag) -NoNewline
     } else {
         Write-Host $tag -ForegroundColor Cyan -NoNewline
     }
@@ -357,26 +357,16 @@ Pop-Location
 if ($exit -ne 0) { Fail 'Playwright Chromium download failed.' }
 Ok 'Chromium installed.'
 
-# 6 - Build the plugin UI (model: dist is built at install time, not committed)
-Step 6 'Building the plugin UI'
-Push-Location $PluginSrc
-& npm install --no-audit --no-fund
-$exit = $LASTEXITCODE
-if ($exit -eq 0) { & npm run build; $exit = $LASTEXITCODE }
-Pop-Location
-if ($exit -ne 0) { Fail 'Failed to build the plugin UI (npm install / vite build in plugin\).' }
-Ok 'UI built.'
-
-# 7 - ffmpeg
-Step 7 'Checking ffmpeg'
+# 6 - ffmpeg
+Step 6 'Checking ffmpeg'
 if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
     Ok 'ffmpeg found.'
 } else {
     Warn 'ffmpeg not found on PATH. Install it (e.g. winget install Gyan.FFmpeg, or choco install ffmpeg), then reopen your terminal.'
 }
 
-# 8 - Copy plugin into DaVinci Resolve (elevated — the only step that needs admin)
-Step 8 'Installing plugin into DaVinci Resolve'
+# 7 - Copy plugin into DaVinci Resolve (elevated — the only step that needs admin)
+Step 7 'Installing plugin into DaVinci Resolve'
 if (-not (Test-Admin)) {
     Write-Host '       (Windows will ask for administrator approval to copy the plugin)' -ForegroundColor DarkGray
 }
@@ -385,8 +375,8 @@ if (-not (Copy-Plugin)) {
 }
 Ok "Installed to $Dest"
 
-# 9 - Verify
-Step 9 'Verifying installation'
+# 8 - Verify
+Step 8 'Verifying installation'
 $required = @(
     'manifest.xml',
     'main.js',
@@ -401,7 +391,7 @@ foreach ($rel in $required) {
 }
 Ok 'All required files present.'
 
-# 10 - Done
-Step 10 'Done'
+# 9 - Done
+Step 9 'Done'
 Show-Success
 Read-Host '       Press Enter to exit'
