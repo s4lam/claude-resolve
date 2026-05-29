@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import Chat from './Chat';
 import ChatInput from './ChatInput';
 import Sidebar from './Sidebar';
@@ -51,10 +51,18 @@ function titleFromMessages(messages = [], fallback = 'Untitled session') {
 
 function latestHtmlContext(messages = []) {
     for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
         const parsed = messages[i]?.parsed;
         if (!parsed) continue;
         const item = Array.isArray(parsed.items) ? parsed.items[0] : parsed;
-        if (item?.html) return { name: item.name || 'Overlay', html: item.html };
+        if (item?.html) {
+            return {
+                name: item.name || 'Overlay',
+                previousName: item.name || 'Overlay',
+                previousPrompt: message?.prompt || '',
+                html: item.html
+            };
+        }
     }
     return null;
 }
@@ -603,6 +611,7 @@ export default function App() {
     const sidebarOpen = sidebar.open;
     const chromeProvider = activeProvider || authInfo.provider || config.provider;
     const chromeModel = chromeProvider === 'codex' ? config.codexModel : config.model;
+    const latestGeneration = useMemo(() => latestHtmlContext(messages), [messages]);
 
     return (
         <>
@@ -627,6 +636,7 @@ export default function App() {
                         onOpenSession={handleOpenSession}
                         onRenameSession={handleRenameSession}
                         onDeleteSession={handleDeleteSession}
+                        latestGeneration={latestGeneration}
                     />
                 )}
                 <div className="main">

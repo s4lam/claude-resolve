@@ -8,7 +8,7 @@ config.json
 dist/release/
 
 # Local working dirs — not part of the repo
-Claude Resolve-handoff_design_v1/
+Resolve AI-handoff_design_v1/
 _mac_sample/
 icon/
 .claude-plugin/

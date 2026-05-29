@@ -128,6 +128,36 @@ function StatusPill({ state }) {
     return <span className={'status-pill ' + normalized}>{statusLabel(normalized)}</span>;
 }
 
+function formatBytes(value) {
+    const bytes = Number(value || 0);
+    if (!bytes) return '';
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function updateStatusText(status, update) {
+    const state = status?.state;
+    if (state === 'checking') return 'Checking GitHub Releases';
+    if (state === 'downloading') {
+        const total = status.totalBytes ? ` / ${formatBytes(status.totalBytes)}` : '';
+        return `Downloading ${formatBytes(status.downloadedBytes)}${total}`;
+    }
+    if (state === 'extracting') return 'Extracting update';
+    if (state === 'ready-to-install') return 'Ready to install';
+    if (state === 'launching-installer') return 'Installer launched';
+    if (state === 'failed') return status.error || 'Update failed';
+    if (update?.hasUpdate && !update.assetUrl) return `Latest release is missing the ${update.platform || 'platform'} ZIP`;
+    if (update?.hasUpdate) return `v${String(update.latest).replace(/^v/, '')} available`;
+    if (update && !update.error) return 'Up to date';
+    return 'Not checked';
+}
+
+function updateProgressPercent(status) {
+    if (status?.state !== 'downloading') return 0;
+    if (!status.totalBytes) return 0;
+    return Math.max(0, Math.min(100, Math.round((status.downloadedBytes / status.totalBytes) * 100)));
+}
+
 function ProviderHealthCard({ id, label, status, onLogin }) {
     const state = status?.status || 'unknown';
     const loginable = state !== 'ready' && state !== 'not-installed';
@@ -147,7 +177,9 @@ function ProviderHealthCard({ id, label, status, onLogin }) {
 
 export default function SidebarSettings({ config, onConfigChange, onShowTools, onClose }) {
     const [update, setUpdate] = useState(null);
+    const [updateStatus, setUpdateStatus] = useState(null);
     const [checking, setChecking] = useState(false);
+    const [updating, setUpdating] = useState(false);
     const [health, setHealth] = useState(null);
     const [logs, setLogs] = useState([]);
     const [rawOpen, setRawOpen] = useState(!!config.ui?.rawLogsOpen);
@@ -159,8 +191,13 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
     useEffect(() => {
         runCheck(false);
         refreshHealth();
+        window.updatesAPI?.getStatus?.().then(setUpdateStatus).catch(() => {});
+        const unsubscribe = window.updatesAPI?.onProgress?.(setUpdateStatus);
         const interval = setInterval(refreshHealth, 10000);
-        return () => clearInterval(interval);
+        return () => {
+            clearInterval(interval);
+            unsubscribe?.();
+        };
     }, []);
 
     useEffect(() => {
@@ -187,16 +224,39 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
         setChecking(false);
     }
 
-    function renderUpdateLink() {
+    async function handleUpdateResolveAI() {
+        if (!window.updatesAPI || updating) return;
+        setUpdating(true);
+        try {
+            let staged = updateStatus?.state === 'ready-to-install' ? updateStatus : null;
+            if (!staged) {
+                staged = await window.updatesAPI.download({ force: true });
+                setUpdateStatus(staged);
+            }
+            if (staged?.success || staged?.state === 'ready-to-install') {
+                const installed = await window.updatesAPI.install();
+                setUpdateStatus(installed);
+            }
+        } catch (err) {
+            setUpdateStatus({ state: 'failed', error: err.message || 'update-failed' });
+        }
+        setUpdating(false);
+    }
+
+    function renderUpdateActions() {
         if (checking) return <button className="settings-small-btn" disabled>Checking</button>;
         if (update?.error) return <button className="settings-small-btn danger" onClick={() => runCheck(true)}>Retry</button>;
-        if (update?.hasUpdate) {
+        if (update?.hasUpdate && !update.assetUrl && updateStatus?.state !== 'ready-to-install') {
+            return <button className="settings-small-btn danger" disabled>Missing {update.platform || 'platform'} ZIP</button>;
+        }
+        if (update?.hasUpdate || updateStatus?.state === 'ready-to-install') {
             return (
                 <button
-                    className="settings-small-btn"
-                    onClick={() => window.windowAPI.openExternal(update.downloadUrl)}
+                    className="settings-small-btn primary"
+                    onClick={handleUpdateResolveAI}
+                    disabled={updating || ['downloading', 'extracting', 'launching-installer'].includes(updateStatus?.state)}
                 >
-                    Update v{String(update.latest).replace(/^v/, '')}
+                    {updating || ['downloading', 'extracting'].includes(updateStatus?.state) ? 'Updating' : 'Update Resolve AI'}
                 </button>
             );
         }
@@ -299,6 +359,7 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
     const renderCodec = renderSettings.outputFormat === 'prores' && renderSettings.proresProfile === '4444xq'
         ? 'ProRes 4444 XQ'
         : renderPreset.codec;
+    const updateProgress = updateProgressPercent(updateStatus);
     const brandFilledCount = useMemo(() => {
         return ['colors', 'fonts', 'tone', 'logoPath', 'phrases'].filter(key => String(brandKit[key] || '').trim()).length;
     }, [brandKit]);
@@ -601,12 +662,34 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
                 </SettingsSection>
 
                 <SettingsSection title="App" meta={versionText} defaultOpen={false}>
-                    <div className="settings-app-row">
-                        <div>
-                            <strong>Resolve AI</strong>
-                            <span>{versionText}</span>
+                    <div className="settings-app-card">
+                        <div className="settings-app-row">
+                            <div>
+                                <strong>Resolve AI</strong>
+                                <span>Current {versionText}</span>
+                            </div>
+                            {renderUpdateActions()}
                         </div>
-                        {renderUpdateLink()}
+                        <div className="update-status" data-state={updateStatus?.state || 'idle'}>
+                            <span>{updateStatusText(updateStatus, update)}</span>
+                            {update?.latest && <em>Latest v{String(update.latest).replace(/^v/, '')}</em>}
+                        </div>
+                        {updateStatus?.state === 'downloading' && (
+                            <div className="update-progress" aria-label={`Update download ${updateProgress}% complete`}>
+                                <span style={{ width: `${updateProgress}%` }} />
+                            </div>
+                        )}
+                        {updateStatus?.instruction && (
+                            <p className="update-instruction">{updateStatus.instruction}</p>
+                        )}
+                        {update?.hasUpdate && update?.downloadUrl && (
+                            <button
+                                className="settings-link-btn"
+                                onClick={() => window.windowAPI.openExternal(update.downloadUrl)}
+                            >
+                                Open release notes
+                            </button>
+                        )}
                     </div>
                 </SettingsSection>
             </div>

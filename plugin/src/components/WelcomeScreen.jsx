@@ -1,5 +1,5 @@
 import React from 'react';
-import { Github, Insta } from './Icons';
+import { Github } from './Icons';
 import { PROMPT_PRESETS } from '../data/promptPresets';
 
 const CHIPS = PROMPT_PRESETS.slice(0, 3).map((preset, index) => ({
@@ -78,7 +78,7 @@ export default function WelcomeScreen({ authInfo, config, onAuthStateChange, onS
             <div className="w-logo" />
             <h1 className="w-title stagger">Resolve AI</h1>
             <p className="w-sub stagger">AI Motion Graphics for DaVinci Resolve</p>
-            <p className="w-author stagger">by <b>Oleg Kupshukov</b></p>
+            <p className="w-author stagger">multi-provider fork of Claude Resolve</p>
 
             <div className="chips">
                 {CHIPS.map((c, i) => (
@@ -98,12 +98,12 @@ export default function WelcomeScreen({ authInfo, config, onAuthStateChange, onS
             </button>
 
             <div className="w-footer stagger">
-                <button onClick={() => window.windowAPI.openExternal('https://github.com/olegkupshukov/claude-resolve')}>
+                <button onClick={() => window.windowAPI.openExternal('https://github.com/s4lam/resolve-ai')}>
                     <Github /> GitHub
                 </button>
                 <span className="divider" />
-                <button onClick={() => window.windowAPI.openExternal('https://instagram.com/olegkupshukov')}>
-                    <Insta /> @olegkupshukov
+                <button onClick={() => window.windowAPI.openExternal('https://github.com/olegkupshukov/claude-resolve')}>
+                    Upstream
                 </button>
             </div>
         </div>

@@ -59,7 +59,7 @@ app.whenReady().then(async () => {
     setupTemplatePackHandlers(ipcMain);
     setupCaptionHandlers(ipcMain);
     setupShowcaseHandlers(ipcMain);
-    setupUpdateHandlers(ipcMain);
+    setupUpdateHandlers(ipcMain, mainWindow);
     setupPreviewHandlers(ipcMain);
     setupTimelineHandlers(ipcMain);
     setupVariationHandlers(ipcMain);

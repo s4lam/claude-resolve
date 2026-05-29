@@ -486,9 +486,12 @@ $required = @(
     'ipc\showcase.js',
     'ipc\template-packs.js',
     'ipc\templates.js',
+    'ipc\updates.js',
     'dist\index.html',
     'renderer\render.js',
-    'renderer\node_modules\playwright'
+    'renderer\node_modules\playwright',
+    'updater\install-update.ps1',
+    'updater\install-update.sh'
 )
 foreach ($rel in $required) {
     if (-not (Test-Path (Join-Path $Dest $rel))) {

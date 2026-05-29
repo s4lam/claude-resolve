@@ -140,7 +140,15 @@ contextBridge.exposeInMainWorld('showcaseAPI', {
 });
 
 contextBridge.exposeInMainWorld('updatesAPI', {
-    check: (opts) => ipcRenderer.invoke('app:checkUpdate', opts)
+    check: (opts) => ipcRenderer.invoke('app:checkUpdate', opts),
+    download: (opts) => ipcRenderer.invoke('app:downloadUpdate', opts),
+    install: () => ipcRenderer.invoke('app:installStagedUpdate'),
+    getStatus: () => ipcRenderer.invoke('app:getUpdateStatus'),
+    onProgress: (callback) => {
+        const handler = (_e, data) => callback(data);
+        ipcRenderer.on('app:updateProgress', handler);
+        return () => ipcRenderer.removeListener('app:updateProgress', handler);
+    }
 });
 
 contextBridge.exposeInMainWorld('previewAPI', {

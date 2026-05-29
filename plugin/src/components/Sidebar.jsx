@@ -35,7 +35,8 @@ export default function Sidebar({
     onNewSession,
     onOpenSession,
     onRenameSession,
-    onDeleteSession
+    onDeleteSession,
+    latestGeneration
 }) {
     const [activeTool, setActiveTool] = useState(config?.ui?.activeToolTab || 'create');
 
@@ -65,9 +66,9 @@ export default function Sidebar({
                 />
             );
         }
-        if (activeTool === 'create') return <SidebarCreate config={config} onPrompt={onPrompt} />;
+        if (activeTool === 'create') return <SidebarCreate config={config} onConfigChange={onConfigChange} latestGeneration={latestGeneration} onPrompt={onPrompt} />;
         if (activeTool === 'timeline') return <SidebarTimeline config={config} onPrompt={onUsePrompt || onPrompt} />;
-        if (activeTool === 'variations') return <SidebarVariations config={config} onConfigChange={onConfigChange} onPrompt={onPrompt} onUsePrompt={onUsePrompt || onPrompt} />;
+        if (activeTool === 'variations') return <SidebarVariations config={config} onConfigChange={onConfigChange} latestGeneration={latestGeneration} onPrompt={onPrompt} onUsePrompt={onUsePrompt || onPrompt} />;
         if (activeTool === 'renders') return <SidebarAssets onPrompt={onUsePrompt || onPrompt} />;
         if (activeTool === 'gallery') return <SidebarPromptGallery config={config} onConfigChange={onConfigChange} onPrompt={onUsePrompt || onPrompt} />;
         if (activeTool === 'captions') return <SidebarCaptions config={config} onConfigChange={onConfigChange} onPrompt={onPrompt} />;

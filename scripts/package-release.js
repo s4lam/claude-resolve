@@ -5,8 +5,11 @@ const { execFileSync, execSync } = require('child_process');
 const root = path.resolve(__dirname, '..');
 const pluginPkg = JSON.parse(fs.readFileSync(path.join(root, 'plugin', 'package.json'), 'utf8'));
 const outDir = path.join(root, 'dist', 'release');
-const zipName = `resolve-ai-${pluginPkg.version || 'dev'}.zip`;
-const zipPath = path.join(outDir, zipName);
+const version = pluginPkg.version || 'dev';
+const zipNames = [
+    `ResolveAI-Windows-v${version}.zip`,
+    `ResolveAI-macOS-v${version}.zip`
+];
 const stageDir = path.join(outDir, 'resolve-ai');
 
 function ensureBuiltinTemplatePack() {
@@ -66,15 +69,24 @@ for (const file of ['README.md', 'CONTRIBUTING.md', 'RELEASE_NOTES.md', 'LICENSE
     if (fs.existsSync(source)) copyRecursive(source, path.join(stageDir, file));
 }
 
-fs.rmSync(zipPath, { force: true });
-if (process.platform === 'win32') {
-    execFileSync('powershell.exe', [
-        '-NoProfile',
-        '-Command',
-        `Compress-Archive -Path "${stageDir}\\*" -DestinationPath "${zipPath}" -Force`
-    ], { stdio: 'inherit' });
-} else {
-    execFileSync('zip', ['-r', zipPath, '.'], { cwd: stageDir, stdio: 'inherit' });
+for (const zipName of zipNames) {
+    fs.rmSync(path.join(outDir, zipName), { force: true });
 }
 
-console.log(zipPath);
+function createZip(zipName) {
+    const zipPath = path.join(outDir, zipName);
+    if (process.platform === 'win32') {
+        execFileSync('powershell.exe', [
+            '-NoProfile',
+            '-Command',
+            `Compress-Archive -Path "${stageDir}\\*" -DestinationPath "${zipPath}" -Force`
+        ], { stdio: 'inherit' });
+    } else {
+        execFileSync('zip', ['-r', zipPath, '.'], { cwd: stageDir, stdio: 'inherit' });
+    }
+    console.log(zipPath);
+}
+
+for (const zipName of zipNames) {
+    createZip(zipName);
+}

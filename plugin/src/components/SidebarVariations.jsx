@@ -1,19 +1,20 @@
 import React, { useState } from 'react';
+import { STYLE_LOCKS } from '../data/createWorkflow';
 
-const LOCKS = [
-    ['logo', 'Keep logo'],
-    ['colors', 'Keep colors'],
-    ['layout', 'Keep layout'],
-    ['animationOnly', 'Only animation']
-];
-
-export default function SidebarVariations({ config, onConfigChange, onPrompt, onUsePrompt }) {
+export default function SidebarVariations({ config, onConfigChange, latestGeneration, onPrompt, onUsePrompt }) {
     const [basePrompt, setBasePrompt] = useState('');
     const [variations, setVariations] = useState([]);
     const [status, setStatus] = useState('');
+    const [useLatestStyle, setUseLatestStyle] = useState(false);
     const generation = config.generation || {};
     const locks = generation.locks || {};
     const count = Number(generation.variationCount || 3);
+    const lockLabels = Object.fromEntries(STYLE_LOCKS.map(lock => [lock.id, lock.label]));
+    const styleContext = useLatestStyle && latestGeneration?.html ? {
+        html: latestGeneration.html,
+        previousName: latestGeneration.name || latestGeneration.previousName,
+        previousPrompt: latestGeneration.previousPrompt
+    } : {};
 
     async function patchGeneration(patch) {
         await onConfigChange({
@@ -38,6 +39,7 @@ export default function SidebarVariations({ config, onConfigChange, onPrompt, on
                 basePrompt: prompt,
                 count,
                 locks,
+                ...styleContext,
                 context: {
                     width: config.width,
                     height: config.height,
@@ -65,6 +67,7 @@ export default function SidebarVariations({ config, onConfigChange, onPrompt, on
                 basePrompt: prompt,
                 count,
                 locks,
+                ...styleContext,
                 context: {
                     width: config.width,
                     height: config.height,
@@ -107,19 +110,32 @@ export default function SidebarVariations({ config, onConfigChange, onPrompt, on
                     </select>
                 </label>
                 <div className="variation-locks" aria-label="Variation locks">
-                    {LOCKS.map(([id, label]) => (
+                    {STYLE_LOCKS.map(lock => (
                         <button
                             type="button"
-                            key={id}
-                            className={'lock-chip' + (locks[id] ? ' active' : '')}
-                            aria-pressed={!!locks[id]}
-                            onClick={() => patchGeneration({ locks: { [id]: !locks[id] } })}
+                            key={lock.id}
+                            className={'lock-chip' + (locks[lock.id] ? ' active' : '')}
+                            aria-pressed={!!locks[lock.id]}
+                            onClick={() => patchGeneration({ locks: { [lock.id]: !locks[lock.id] } })}
                         >
-                            {label}
+                            {lock.label}
                         </button>
                     ))}
                 </div>
             </div>
+
+            <label className={'latest-style-toggle' + (!latestGeneration?.html ? ' disabled' : '')}>
+                <input
+                    type="checkbox"
+                    checked={useLatestStyle && !!latestGeneration?.html}
+                    disabled={!latestGeneration?.html}
+                    onChange={e => setUseLatestStyle(e.target.checked)}
+                />
+                <span>
+                    Use latest result as style reference
+                    <small>{latestGeneration?.name || latestGeneration?.previousName || 'No generated HTML yet'}</small>
+                </span>
+            </label>
 
             <div className="variation-primary-panel">
                 <div>
@@ -139,7 +155,7 @@ export default function SidebarVariations({ config, onConfigChange, onPrompt, on
                         </div>
                         <div className="variation-card-copy">
                             <strong>{variation.title}</strong>
-                            <p>{Object.entries(variation.locks || {}).filter(([, value]) => value).map(([key]) => key).join(', ') || 'No locks'}</p>
+                            <p>{Object.entries(variation.locks || {}).filter(([, value]) => value).map(([key]) => lockLabels[key] || key).join(', ') || 'No locks'}</p>
                         </div>
                         <button
                             className="mini-action"

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Claude Resolve — pre-commit guard for a PUBLIC repository.
+# Resolve AI — pre-commit guard for a PUBLIC repository.
 # Blocks the commit when staged additions look like leaked personal data
 # or secrets. Verified false positive? Bypass with:  git commit --no-verify
 #
@@ -29,7 +29,7 @@ scan() {
 scan "personal path fragment (_olehkupshukov)" '_olehkupshukov'
 scan "personal home directory path"            '([a-z]:\\users\\|/users/|/home/)[a-z0-9._-]+'
 scan "absolute drive-letter path (F:/ or C:\\)" '(^|[^a-z])[a-z]:[\\/]'
-scan "personal username (olegk)"               '(^|[^[:alnum:]])olegk([^[:alnum:]]|$)'
+scan "known personal username (olegk)"         '(^|[^[:alnum:]])olegk([^[:alnum:]]|$)'
 scan "personal email address (gmail)"          '[a-z0-9._%+-]+@gmail\.com'
 scan "Notion workspace link"                   'notion\.(so|site)/'
 scan "Anthropic API key"                       'sk-ant-[a-z0-9_-]{10,}'

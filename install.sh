@@ -367,7 +367,7 @@ ok "Installed to $DEST"
 
 # 8 - Verify
 step 8 'Verifying installation'
-for rel in manifest.xml main.js data/builtin-template-packs.json ipc/assets.js ipc/agent.js ipc/agent-logs.js ipc/captions.js ipc/codex.js ipc/codex-parser.js ipc/codex-stderr-filter.js ipc/render-validation.js ipc/repair.js ipc/showcase.js ipc/template-packs.js ipc/templates.js dist/index.html renderer/render.js renderer/node_modules/playwright; do
+for rel in manifest.xml main.js data/builtin-template-packs.json ipc/assets.js ipc/agent.js ipc/agent-logs.js ipc/captions.js ipc/codex.js ipc/codex-parser.js ipc/codex-stderr-filter.js ipc/render-validation.js ipc/repair.js ipc/showcase.js ipc/template-packs.js ipc/templates.js ipc/updates.js dist/index.html renderer/render.js renderer/node_modules/playwright updater/install-update.ps1 updater/install-update.sh; do
     if [ ! -e "$DEST/$rel" ]; then
         fail "Verification failed - missing: $rel"
     fi

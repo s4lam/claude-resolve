@@ -27,7 +27,7 @@ for (const tab of ['Create', 'Timeline', 'Assets', 'Variations', 'Captions', 'Ga
 }
 
 const preload = fs.readFileSync(path.join(root, 'plugin/preload.js'), 'utf8');
-for (const api of ['timelineAPI', 'variationAPI', 'assetAPI', 'captionAPI', 'galleryAPI', 'debugAPI']) {
+for (const api of ['timelineAPI', 'variationAPI', 'assetAPI', 'captionAPI', 'galleryAPI', 'debugAPI', 'updatesAPI']) {
     if (!preload.includes(api)) throw new Error(`Missing preload API ${api}`);
 }
 

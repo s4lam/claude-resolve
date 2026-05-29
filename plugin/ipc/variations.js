@@ -20,12 +20,13 @@ function lockLines(locks = {}) {
     const lines = [];
     if (locks.logo) lines.push('- Keep the selected logo/image asset recognizable and do not redraw it.');
     if (locks.colors) lines.push('- Keep the same color palette and brand color relationships.');
+    if (locks.typography) lines.push('- Keep the same typography direction, font mood, weight contrast, and text hierarchy.');
     if (locks.layout) lines.push('- Keep the same composition/layout and only adjust details.');
-    if (locks.animationOnly) lines.push('- Only change animation timing/motion; do not change layout, copy, colors, or assets.');
+    if (locks.animationOnly) lines.push('- Only change animation timing/motion; do not change layout, copy, colors, typography, or assets.');
     return lines;
 }
 
-function buildVariationPrompt({ basePrompt = '', html = '', variation, locks = {}, context = {} } = {}) {
+function buildVariationPrompt({ basePrompt = '', html = '', previousName = '', previousPrompt = '', variation, locks = {}, context = {} } = {}) {
     const lockText = lockLines(locks);
     return [
         'Create a Resolve AI variation for the following motion graphics request.',
@@ -38,6 +39,9 @@ function buildVariationPrompt({ basePrompt = '', html = '', variation, locks = {
         lockText.length ? 'Locks:' : '',
         ...lockText,
         '',
+        payloadLine('Style reference name', previousName),
+        payloadLine('Previous prompt', previousPrompt),
+        '',
         html ? 'Previous generated HTML context:' : '',
         html ? '```html' : '',
         html || '',
@@ -45,6 +49,10 @@ function buildVariationPrompt({ basePrompt = '', html = '', variation, locks = {
         '',
         'Return one complete HTML file using window.renderFrame(frame, fps) and window.getAnimationDuration().'
     ].filter(Boolean).join('\n');
+}
+
+function payloadLine(label, value) {
+    return value ? `${label}: ${value}` : '';
 }
 
 function buildVariationSet(payload = {}) {
@@ -84,6 +92,9 @@ function buildMultiVariationPrompt(payload = {}) {
         '',
         lockText.length ? 'Locks that apply to every variation:' : '',
         ...lockText,
+        '',
+        payloadLine('Style reference name', payload.previousName),
+        payloadLine('Previous prompt', payload.previousPrompt),
         '',
         payload.html ? 'Previous generated HTML context:' : '',
         payload.html ? '```html' : '',

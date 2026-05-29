@@ -1,9 +1,9 @@
-# CLAUDE.md — Claude Resolve Project Rules
+# CLAUDE.md — Resolve AI Project Rules
 
 ## Project
 
 AI-powered motion graphics generator & assistant for DaVinci Resolve Studio.
-Workflow Integration Plugin (Electron) that embeds Claude Code as terminal inside Resolve.
+Workflow Integration Plugin (Electron) that supports Claude Code and OpenAI Codex through local CLIs.
 
 ## ⚠️ Security — Public Repo
 
@@ -38,7 +38,7 @@ Installed from `emilkowalski/skill` at `skills/emil-design-eng/SKILL.md`. **Read
 
 - **Plugin**: Electron (bundled with Resolve 21), HTML/CSS/JS
 - **Resolve API**: WorkflowIntegration.node (sandboxed model, IPC via preload.js)
-- **AI Engine**: Claude Code CLI (spawned via child_process from main.js)
+- **AI Engine**: Claude Code CLI and OpenAI Codex CLI (spawned via child_process from main.js)
 - **Overlay Render**: Playwright (frame-perfect, renderFrame API) → ffmpeg → ProRes 4444
 - **MCP**: davinci-resolve-mcp for Resolve control (future)
 
@@ -50,6 +50,7 @@ All paths use `<USERNAME>` placeholder. Replace with actual username locally.
 - Plugin install: `C:\ProgramData\Blackmagic Design\DaVinci Resolve\Support\Workflow Integration Plugins\`
 - SamplePlugin: `...\Developer\Workflow Integrations\Examples\SamplePlugin\`
 - Claude CLI: `C:\Users\<USERNAME>\AppData\Roaming\npm\claude.cmd`
+- Codex CLI: `C:\Users\<USERNAME>\AppData\Roaming\npm\codex.cmd`
 
 ## Resolve Plugin Architecture (v19.0.2+)
 
@@ -72,7 +73,7 @@ No setTimeout, no requestAnimationFrame. Frame-perfect deterministic rendering.
 ## File Structure
 
 ```
-claude-resolve/
+resolve-ai/
   .claude/CLAUDE.md      ← this file
   README.md              ← public readme
   .gitignore             ← must cover .env, node_modules/, local configs

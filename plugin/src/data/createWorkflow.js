@@ -66,11 +66,60 @@ export const STYLE_LEVELS = [
     ['bold', 'Bold']
 ];
 
-export function buildCreatePrompt({ type, idea, duration, backgroundMode, aspectRatio, styleLevel, selectedAssets, config, timelineContext }) {
+export const STYLE_LOCKS = [
+    {
+        id: 'logo',
+        label: 'Keep logo',
+        instruction: '- Keep selected logo/image assets recognizable, full quality, and do not redraw them.'
+    },
+    {
+        id: 'colors',
+        label: 'Keep colors',
+        instruction: '- Keep the same color palette and brand color relationships.'
+    },
+    {
+        id: 'typography',
+        label: 'Keep type',
+        instruction: '- Keep the same typography direction, font mood, weight contrast, and text hierarchy.'
+    },
+    {
+        id: 'layout',
+        label: 'Keep layout',
+        instruction: '- Keep the same composition scale, safe margins, and major layout relationships.'
+    },
+    {
+        id: 'animationOnly',
+        label: 'Only motion',
+        instruction: '- Only change animation timing and motion; do not change layout, copy, colors, typography, or assets.'
+    }
+];
+
+export function buildStyleLockLines(locks = {}) {
+    return STYLE_LOCKS
+        .filter(lock => !!locks?.[lock.id])
+        .map(lock => lock.instruction);
+}
+
+export function buildCreatePrompt({
+    type,
+    idea,
+    duration,
+    backgroundMode,
+    aspectRatio,
+    styleLevel,
+    selectedAssets,
+    config,
+    timelineContext,
+    locks = {},
+    useLatestStyle = false,
+    latestGeneration = null
+}) {
     const chosen = CREATE_TYPES.find(item => item.id === type) || CREATE_TYPES[0];
     const fps = config?.fps || 25;
     const width = config?.width || 1920;
     const height = config?.height || 1080;
+    const lockText = buildStyleLockLines(locks);
+    const hasLatestStyle = !!(useLatestStyle && latestGeneration?.html);
     const assetText = selectedAssets > 0
         ? `Use the ${selectedAssets} attached local asset${selectedAssets === 1 ? '' : 's'} when relevant. Keep referenced assets recognizable and use exact file URLs if provided.`
         : 'No assets are attached.';
@@ -93,6 +142,14 @@ export function buildCreatePrompt({ type, idea, duration, backgroundMode, aspect
         timelineContext?.currentTimecode ? `Playhead: ${timelineContext.currentTimecode}.` : 'Playhead unavailable.',
         clipLines.length ? `Selected clip context:\n${clipLines.join('\n')}` : 'Selected clip context unavailable.',
         `Style intensity: ${styleLevel}.`,
+        lockText.length ? 'Style locks:' : '',
+        ...lockText,
+        hasLatestStyle ? `Use latest result as style reference: ${latestGeneration.previousName || latestGeneration.name || 'Previous Resolve AI result'}.` : '',
+        hasLatestStyle && latestGeneration.previousPrompt ? `Previous prompt: ${latestGeneration.previousPrompt}` : '',
+        hasLatestStyle ? 'Latest generated HTML context:' : '',
+        hasLatestStyle ? '```html' : '',
+        hasLatestStyle ? latestGeneration.html : '',
+        hasLatestStyle ? '```' : '',
         assetText,
         'Keep the output practical for DaVinci Resolve editors and universal creator/business/social/video workflows.',
         'Use window.renderFrame(frame, fps) and window.getAnimationDuration().',

@@ -1,162 +1,205 @@
-# Resolve AI (v0.5.0-beta)
+# Resolve AI
 
-**AI motion graphics inside DaVinci Resolve**
-*by Oleg Kupshukov*
+**AI motion graphics inside DaVinci Resolve.**
 
-Resolve AI is a Workflow Integration Plugin that brings AI-powered motion graphics generation directly into DaVinci Resolve Studio. Describe what you want in plain text, and either Claude Code or OpenAI Codex generates the animation code, renders it with ProRes MOV, CPU MP4, or GPU MP4 presets, and imports it to your timeline.
+Resolve AI is a creator-focused DaVinci Resolve Studio Workflow Integration Plugin for generating motion graphics with local AI CLIs. Describe a title card, lower third, transition, caption overlay, logo reveal, or template idea, then preview, render, and add it to your timeline.
 
-<img src="screenshots/welcome_screen.png" alt="Welcome screen" width="600">
+This project is an independent fork of [Claude Resolve](https://github.com/olegkupshukov/claude-resolve). It keeps Claude compatibility and adds Codex support, provider-neutral UI, asset-aware generation, render presets, sessions, prompt galleries, templates, and creator workflow tools.
 
-<img src="screenshots/ready-to-render.png" alt="Render card with result" width="600">
+Official fork repository: [s4lam/resolve-ai](https://github.com/s4lam/resolve-ai)
+
+<img src="screenshots/welcome_screen.png" alt="Resolve AI welcome screen" width="600">
+
+<img src="screenshots/ready-to-render.png" alt="Resolve AI render card" width="600">
+
+## What Makes This Fork Different
+
+- **Claude + Codex**: choose Claude Code, OpenAI Codex CLI, or Auto.
+- **Resolve-style render presets**: ProRes MOV, CPU MP4 Quality, and GPU MP4 Quality.
+- **Project sessions**: local chat/session history for separate projects and timelines.
+- **Prompt Gallery + Templates**: reusable local prompt and template packs.
+- **Asset-aware generation**: attach logos, product images, textures, references, and brand notes.
+- **Timeline tools**: generate titles, lower thirds, transitions, and marker-based graphics with timeline context where Resolve exposes it.
+- **Caption workflows**: import SRT/VTT or paste transcript text and create transparent caption overlays.
+- **Local-first**: assets, transcripts, renders, templates, sessions, and provider auth stay on your machine.
 
 ## Requirements
 
-- **DaVinci Resolve Studio 21+** (not the free version — Workflow Integration Plugins require Studio)
-- **Node.js 18+** — required by the AI CLI integrations
-- **Claude Code CLI** with an active Pro or Max subscription, or **OpenAI Codex CLI** with a supported OpenAI/ChatGPT account
-- **ffmpeg** in PATH
-- **Windows** or **macOS**
+- **DaVinci Resolve Studio 21+**. Workflow Integration Plugins require Studio.
+- **Windows** or **macOS**.
+- **Node.js 18+**.
+- **ffmpeg** available in PATH.
+- At least one supported AI CLI:
+  - [OpenAI Codex CLI](https://developers.openai.com/codex/cli)
+  - [Claude Code CLI](https://claude.ai/claude-code)
 
-Check your Node.js version:
-
-```
-node --version    # must be v18 or newer
-```
-
-On macOS, if it's older than 18, upgrade with `brew install node` (latest) or `fnm install 22`.
-
-## Installation
-
-### Windows
-1. Download or clone the repo
-2. Double-click `install.bat`
-3. Restart DaVinci Resolve
-
-### macOS
-1. Download or clone the repo
-2. Double-click `install.command`
-   - **"unidentified developer"?** Right-click `install.command` → **Open**, then confirm.
-   - **Double-click does nothing / "permission denied"?** A ZIP download strips the executable bit. Open Terminal in the repo folder and run `bash install.command` (it restores the bit), or `chmod +x install.command`.
-   - **Still blocked by Gatekeeper?** Clear the quarantine flag in the repo folder: `xattr -dr com.apple.quarantine .`
-3. Restart DaVinci Resolve
-
-The installer checks for DaVinci Resolve and Node.js, installs the renderer's dependencies (Playwright + Chromium), lets you choose Codex CLI or Claude Code if no supported AI CLI is found, and copies the plugin into Resolve. After installing, open the plugin from **Workspace > Workflow Integration > Resolve AI**.
-
-If installation fails with `Verification failed - missing: dist/index.html`, the plugin UI bundle was not built before the installer copied files. Update to the latest installer and run it again, or build manually from the repo root:
+Check Node:
 
 ```bash
-npm --prefix plugin install
-npm --prefix plugin run build
-./install.command
+node --version
 ```
 
-Install and log in to at least one AI CLI:
+Install and log in to one or both providers:
 
-```
-npm install -g @anthropic-ai/claude-code
-claude login
-```
-
-```
+```bash
 npm install -g @openai/codex
 codex login
 ```
 
-The plugin uses each CLI's local auth. It does not store OpenAI or Anthropic API keys.
-Codex auth is handled only by the Codex CLI (`codex login` / `codex login status`); Resolve AI never asks for or stores an OpenAI API key.
+```bash
+npm install -g @anthropic-ai/claude-code
+claude login
+```
+
+Resolve AI uses each CLI's own local auth. It does not ask for, store, or sync OpenAI or Anthropic API keys.
+
+## Installation
+
+### Recommended Release Install
+
+1. Download the latest release ZIP from this fork's GitHub Releases.
+2. Extract the ZIP.
+3. Run the installer:
+   - Windows: double-click `install.bat`
+   - macOS: double-click `install.command`
+4. Restart DaVinci Resolve.
+5. Open **Workspace > Workflow Integration > Resolve AI**.
+
+### Install From Source
+
+```bash
+npm --prefix plugin install
+npm --prefix plugin run build
+```
+
+Then run the platform installer:
+
+```bash
+# Windows
+install.bat
+```
+
+```bash
+# macOS
+bash install.command
+```
+
+On macOS, if Gatekeeper blocks the downloaded folder:
+
+```bash
+xattr -dr com.apple.quarantine .
+chmod +x install.command install.sh
+bash install.command
+```
 
 ## Usage
 
-### One-minute quickstart
+1. Open **Workspace > Workflow Integration > Resolve AI**.
+2. Choose a provider in Settings: Auto, Codex, or Claude.
+3. Type a prompt, use Timeline tools, or pick from the Prompt Gallery.
+4. Preview the generated motion graphic.
+5. Pick a render preset:
+   - **ProRes MOV** for transparent overlays.
+   - **CPU MP4 Quality** for high-quality H.264 exports without alpha.
+   - **GPU MP4 Quality** for NVIDIA HEVC NVENC HQ exports without alpha.
+6. Click **Render .mov** or **Render .mp4**.
 
-1. Open **Workspace > Workflow Integration > Resolve AI**
-2. Pick Codex or Claude in Settings
-3. Click a Prompt Gallery item or type a prompt
-4. Preview the generated motion graphic
-5. Click **Render .mov** or **Render .mp4** to import the selected render preset at the playhead
-6. Use **Sessions**, **Timeline tools**, **Regenerate**, **Fix with AI**, **Save as Template**, or render history to iterate
+Rendered files are stored locally in the Resolve AI render history and imported into the current timeline when Resolve allows it.
 
-### Prompt → Render Examples
+## Example Prompts
 
-| Prompt | Result |
+| Goal | Prompt |
 | --- | --- |
-| “Create a bold creator title card for a tech review channel.” | Full-frame title card with animated typography |
-| “Create a transparent lower third for a podcast guest.” | Alpha lower third imported onto the timeline |
-| “Import this SRT and make kinetic captions.” | Timed transparent caption overlay |
-| “Use the selected logo as the central mark.” | Asset-aware logo reveal |
+| Title card | `Create a bold 5 second title card for a tech review channel, 1920x1080, premium motion, clean final hold.` |
+| Lower third | `Create a transparent lower third for a podcast guest named Alex Rivera, subtle motion, readable over talking-head footage.` |
+| Logo reveal | `Use the selected logo asset as the central mark in a 5 second transparent logo reveal.` |
+| Captions | `Import this SRT and create kinetic social captions with word emphasis and transparent background.` |
+| Transition | `Create a 2 second transparent transition overlay at the playhead, clean diagonal wipe, not too flashy.` |
 
-## How it works
+## Features
 
-Generates one-off HTML animations rendered frame-by-frame via Playwright + ffmpeg. Use ProRes 4444 .mov for alpha transparency overlays, CPU MP4 Quality for portable H.264 exports, or GPU MP4 Quality for NVIDIA HEVC NVENC HQ. The rendered file is automatically imported to your current timeline on an empty track at the playhead position.
-Each render can also write local sidecar metadata beside the .mov so the history browser can search, restore prompts, and re-render previous work.
+- **Provider health**: install/login/version status for Claude and Codex.
+- **Raw logs drawer**: keeps CLI noise out of chat while preserving diagnostics.
+- **Prompt presets**: title card, lower third, caption, transition, logo reveal.
+- **Regenerate actions**: more cinematic, simpler, transparent background, longer, same style, three variations.
+- **Brand Kit**: colors, fonts, logo path, tone, and repeated phrases.
+- **Asset Library**: drag/drop assets, categories, notes, health checks, selected-asset prompt injection.
+- **Template Library**: save generated overlays and reuse them later.
+- **Prompt Gallery**: built-in creator, podcast, gaming, product, documentary, business, social, event, sports, and music ideas.
+- **Community template packs**: local JSON packs with validation.
+- **Caption Studio**: SRT/VTT parsing and caption style prompts.
+- **Render history**: thumbnails, rename, reveal, delete, sync, and re-render.
+- **Showcase builder**: export a local static page from saved templates and renders.
+- **Debug bundle**: collect useful diagnostics for issue reports.
 
-**Use it for:** title cards, text reveals, glitch effects, lower thirds, transitions — any specific animation for the project at hand.
+## Security And Privacy
 
-## Growth Features
+- No API keys are stored by the app.
+- Provider login is handled by the provider CLI.
+- Template pack URL installs block localhost, private network ranges, link-local metadata addresses, and unsafe redirects.
+- Generated files, assets, sessions, captions, templates, and renders stay local.
 
-- **Prompt Gallery**: built-in creator, podcast, gaming, product, documentary, business, social, event, sports, and music prompts.
-- **Project sessions**: local chat history per project/timeline, with saved generated cards and quick switching between sessions.
-- **Timeline tools**: generate titles, lower thirds, transitions, marker-based graphics, and re-renders with current timeline context.
-- **Create workflow**: choose motion type, duration, background mode, aspect ratio, social safe-area intent, style intensity, and review the generation brief before sending.
-- **Template Packs**: local JSON packs that contributors can submit and users can import from disk or GitHub raw URLs.
-- **Captions**: local SRT/VTT import, pasted transcript parsing, preview cues, and clean/kinetic/karaoke/social/podcast styles.
-- **Asset-aware generation**: drag/drop images, inspect asset health, attach logos/products/textures/reference images, build a selected-asset reference board, and extract brand colors.
-- **Variation previews**: draft multiple prompt variations with locks for logo, colors, layout, and animation-only changes.
-- **Render settings**: choose Resolve-style presets for ProRes MOV, CPU MP4 Quality, or GPU MP4 Quality, plus FFmpeg thread limits, ProRes 4444/4444 XQ, and optional MP4 proxy copies.
-- **Fix with AI**: send render failures back to the active provider for repair.
-- **Showcase builder**: export a static local showcase page from saved templates/prompts.
+## Compatibility Notes
 
-## Settings
+The visible app name is **Resolve AI**.
 
-Open the sidebar (gear icon) to configure:
+Some internal identifiers intentionally remain unchanged for backwards compatibility with existing installs:
 
-- **Provider**: Auto, Claude Code, or Codex CLI
-- **Model**: Claude Sonnet/Opus or Codex default/supported GPT model
-- **FPS**: 24, 25, 30, or 60
-- **Resolution**: 1920×1080, 3840×2160, 1080×1920, 1080×1350, or 1080×1080
-- **Provider Health**: installed/login/version status for Claude and Codex, plus a collapsible raw log drawer for troubleshooting
-- **Brand Kit**: local colors, fonts, logo path, tone, and common phrases injected into new generations
-- **Timeline**: quick actions that use current timeline FPS, resolution, playhead, and duration when Resolve exposes them
-- **Render**: final preset, format, codec, encoder, ProRes profile, FFmpeg threads, hardware H.264, and HEVC NVENC HQ settings. Use ProRes `.mov` for transparency; use MP4 only when alpha is not needed.
-- **Sessions**: create, reopen, rename, search, and delete local project chat sessions
-- **Asset Library**: drag/drop local PNG/JPG/WebP/SVG/GIF assets, inspect dimensions/health, attach selected assets to new prompts, and provide notes so the AI uses them correctly
-- **Variations**: generate multiple prompt directions and lock logo/colors/layout/animation behavior
-- **Gallery**: search, category filters, favorites, recents, local import, and GitHub raw URL installs
-- **Templates**: save generated overlays locally and reuse them later
-- **Renders**: searchable render history with thumbnails, rename, reveal, delete, sync, and re-render
+- Plugin ID: `com.clauderesolve.plugin`
+- Legacy config/render folder: `Claude Resolve`
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [community-templates](community-templates/README.md). Neutral creator-focused template packs are especially useful.
-
-Suggested GitHub topics: `davinci-resolve`, `motion-graphics`, `ai-video`, `codex`, `claude`, `electron`, `video-generation`.
-
-## Bundled Fonts
-
-The plugin ships with a curated set of fonts so generated animations look consistent across machines without extra installs:
-
-- **Bricolage Grotesque**
-- **Fraunces**
-- **JetBrains Mono**
-
-## Known Limitations
-
-- Complex prompts may be slow on smaller models — switch to a stronger provider/model for detailed animations
-- The plugin spawns the selected AI CLI as a subprocess — first response may take a few seconds to warm up
-- This is a beta — expect rough edges; please report issues on GitHub or Discord
-
-Tested on Windows and macOS (Apple Silicon).
+Do not rename those unless you are ready to migrate existing user data and installed plugin paths.
 
 ## Troubleshooting
 
-- If installation verification reports `missing: dist/index.html`, download the latest release ZIP or run `npm --prefix plugin run build` before installing.
-- If verification reports `missing: data/builtin-template-packs.json`, download the latest release ZIP and rerun the installer. Current installers recreate that starter pack automatically.
+- **Installer says `missing: dist/index.html`**: use the release ZIP or run `npm --prefix plugin run build`, then rerun the installer.
+- **Installer says `missing: data/builtin-template-packs.json`**: update to the latest release ZIP and rerun the installer.
+- **macOS says unidentified developer**: right-click `install.command`, choose **Open**, then confirm.
+- **Render does nothing on macOS**: update to the latest fork version. The renderer now uses the installed Node runtime and shows visible render failures.
+- **MP4 is not transparent**: use **ProRes MOV**. MP4 presets flatten alpha.
 
-## Links
+## Development
 
-- [GitHub](https://github.com/olegkupshukov/claude-resolve)
-- [Discord](https://discord.gg/95YrCyMgsK)
-- [Instagram](https://instagram.com/olegkupshukov)
+```bash
+npm --prefix plugin test
+npm --prefix plugin run build
+```
+
+Package a release ZIP:
+
+```bash
+npm --prefix plugin run package:release
+```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [community-templates](community-templates/README.md).
+
+Useful contribution areas:
+
+- New universal template packs.
+- Better Resolve timeline actions.
+- Render/installer reliability.
+- Caption styles.
+- Asset-aware generation improvements.
+- UI polish for narrow plugin windows.
+
+Suggested GitHub topics:
+
+```text
+davinci-resolve
+motion-graphics
+ai-video
+codex
+claude
+electron
+video-generation
+resolve-ai
+```
+
+## Credits
+
+Resolve AI is built from the excellent original [Claude Resolve](https://github.com/olegkupshukov/claude-resolve) project by Oleg Kupshukov. This fork takes the project in a broader multi-provider direction.
 
 ## License
 
@@ -164,8 +207,9 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 ## Built With
 
-- [Claude Code](https://claude.ai/claude-code) and [OpenAI Codex](https://developers.openai.com/codex/cli) — AI engines
-- [DaVinci Resolve Scripting API](https://www.blackmagicdesign.com/products/davinciresolve) — Resolve integration
-- [React](https://react.dev) — Plugin UI
-- [Playwright](https://playwright.dev) — Frame-perfect rendering
-- [ffmpeg](https://ffmpeg.org) — ProRes 4444 encoding
+- [OpenAI Codex CLI](https://developers.openai.com/codex/cli)
+- [Claude Code](https://claude.ai/claude-code)
+- [DaVinci Resolve Scripting API](https://www.blackmagicdesign.com/products/davinciresolve)
+- [React](https://react.dev)
+- [Playwright](https://playwright.dev)
+- [ffmpeg](https://ffmpeg.org)
