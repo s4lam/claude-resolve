@@ -73,21 +73,19 @@ No setTimeout, no requestAnimationFrame. Frame-perfect deterministic rendering.
 
 ```
 claude-resolve/
-  CLAUDE.md              ← this file
+  .claude/CLAUDE.md      ← this file
   README.md              ← public readme
   .gitignore             ← must cover .env, node_modules/, local configs
   plugin/                ← Resolve Workflow Integration Plugin
-    manifest.xml
-    main.js
-    preload.js
-    index.html
+    main.js              ← main process (Node: child_process, fs, WorkflowIntegration)
+    preload.js           ← contextBridge to the renderer UI
+    manifest.xml         ← plugin metadata for Resolve
     package.json
-    WorkflowIntegration.node
-  templates/             ← HTML overlay templates
-    prompt-window/
-    lower-third/
-  renderer/              ← Playwright render pipeline
-    render.js
+    WorkflowIntegration.node / .darwin.node   ← Resolve API (per-OS binary)
+    ipc/                 ← main-process IPC handlers (claude, overlay, paths, resolve, ...)
+    src/                 ← React UI source (built by vite → dist/)
+    dist/                ← built UI, loaded by main.js
+    renderer/render.js   ← Playwright → ffmpeg .mov render pipeline (frame-perfect)
   skills/                ← Design skills (also installed as CC plugins)
     emil-design-eng/
       SKILL.md
