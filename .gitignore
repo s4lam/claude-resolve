@@ -5,6 +5,10 @@ __pycache__/
 *.mov
 config.json
 
+# Build output — the plugin UI is built during install (see install.sh /
+# install.ps1), so dist/ is regenerated rather than committed.
+plugin/dist/
+
 # Local working dirs — not part of the repo
 Claude Resolve-handoff_design_v1/
 _mac_sample/
