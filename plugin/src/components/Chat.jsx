@@ -71,7 +71,7 @@ function RenderCard({ parsed, config }) {
                     <span className="pulse" />{realtime ? 'Realtime' : 'Frame'}
                 </span>
             </div>
-            <Preview parsed={parsed} />
+            <Preview parsed={parsed} width={config.width} height={config.height} />
             <div className="card-foot">
                 <div className="specs">
                     <span className="spec"><b>{config.width}×{config.height}</b></span>

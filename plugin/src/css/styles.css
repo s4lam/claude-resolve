@@ -658,9 +658,16 @@ body, #root {
 
 .card-preview {
     position: relative;
-    aspect-ratio: var(--aspect-video);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     overflow: hidden;
     background: var(--gradient-preview);
+}
+.card-preview-box {
+    position: relative;
+    flex: none;
+    overflow: hidden;
 }
 .card-preview-frame {
     border: 0;

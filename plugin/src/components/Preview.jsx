@@ -56,10 +56,14 @@ window.addEventListener('load', function() {
 
 const REPLAY_BUFFER_MS = 500;
 
-const HTMLPreview = memo(function HTMLPreview({ parsed }) {
+// Preview scales to fit (contain) within the card width and this max height,
+// so vertical/square clips show whole — never cropped. Pure UX cap; tune freely.
+const MAX_PREVIEW_H = 420;
+
+const HTMLPreview = memo(function HTMLPreview({ parsed, width, height }) {
     const iframeRef = useRef(null);
     const containerRef = useRef(null);
-    const [scale, setScale] = useState(1);
+    const [box, setBox] = useState({ w: 0, h: 0, scale: 1 });
     const [isPlaying, setIsPlaying] = useState(true);
     const [bundle, setBundle] = useState(cachedBundle);
     const [replayKey, setReplayKey] = useState(0);
@@ -77,17 +81,25 @@ const HTMLPreview = memo(function HTMLPreview({ parsed }) {
         if (bundle) setReplayKey(k => k + 1);
     }, [parsed.html, bundle]);
 
+    // Fit-to-contain: the box takes the clip's aspect ratio (from config
+    // width/height), bounded by the card width and MAX_PREVIEW_H. The iframe
+    // renders at the clip's real viewport and scales to fill the box — the whole
+    // frame is always visible, never cropped; leftover space letterboxes.
     useEffect(() => {
-        function updateScale() {
-            if (containerRef.current) {
-                setScale(containerRef.current.clientWidth / 1920);
-            }
+        function updateBox() {
+            const availW = containerRef.current && containerRef.current.clientWidth;
+            if (!availW) return;
+            const ar = width / height;
+            let w = availW;
+            let h = w / ar;
+            if (h > MAX_PREVIEW_H) { h = MAX_PREVIEW_H; w = h * ar; }
+            setBox({ w, h, scale: w / width });
         }
-        updateScale();
-        const obs = new ResizeObserver(updateScale);
+        updateBox();
+        const obs = new ResizeObserver(updateBox);
         if (containerRef.current) obs.observe(containerRef.current);
         return () => obs.disconnect();
-    }, []);
+    }, [width, height]);
 
     // IntersectionObserver: pause loop when iframe scrolls offscreen.
     useEffect(() => {
@@ -161,29 +173,35 @@ const HTMLPreview = memo(function HTMLPreview({ parsed }) {
     }
 
     return (
-        <div ref={containerRef} className="card-preview">
-            <iframe
-                key={replayKey}
-                ref={iframeRef}
-                className="card-preview-frame"
-                width="1920"
-                height="1080"
-                sandbox="allow-scripts"
-                srcDoc={srcdoc}
-                style={{ transform: `scale(${scale})` }}
-            />
-            {parsed.mode !== 'realtime' && (
-                <button
-                    className={'card-play' + (isPlaying ? '' : ' play-glyph')}
-                    onClick={togglePlay}
-                >
-                    {isPlaying ? '⏸' : '▶'}
-                </button>
-            )}
+        <div
+            ref={containerRef}
+            className="card-preview"
+            style={{ height: box.h ? `${box.h}px` : undefined }}
+        >
+            <div className="card-preview-box" style={{ width: `${box.w}px`, height: `${box.h}px` }}>
+                <iframe
+                    key={replayKey}
+                    ref={iframeRef}
+                    className="card-preview-frame"
+                    width={width}
+                    height={height}
+                    sandbox="allow-scripts"
+                    srcDoc={srcdoc}
+                    style={{ transform: `scale(${box.scale})` }}
+                />
+                {parsed.mode !== 'realtime' && (
+                    <button
+                        className={'card-play' + (isPlaying ? '' : ' play-glyph')}
+                        onClick={togglePlay}
+                    >
+                        {isPlaying ? '⏸' : '▶'}
+                    </button>
+                )}
+            </div>
         </div>
     );
 });
 
-export default function Preview({ parsed }) {
-    return <HTMLPreview parsed={parsed} />;
+export default function Preview({ parsed, width, height }) {
+    return <HTMLPreview parsed={parsed} width={width || 1920} height={height || 1080} />;
 }
