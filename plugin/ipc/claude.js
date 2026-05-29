@@ -3,11 +3,24 @@ const path = require('path');
 const { handleGetProjectName, handleGetCurrentPage, handleGetCurrentTimeline } = require('./resolve');
 const { readConfig } = require('./config');
 const { CLAUDE_PATH, ENV, isMac } = require('./paths');
+const selectors = require('../src/data/selectors.json');
 
-const MODEL_IDS = {
-    sonnet: 'claude-sonnet-4-20250514',
-    opus: 'claude-opus-4-20250514'
-};
+const MODEL_VALUES = new Set(selectors.models.map(m => m.value));
+const EFFORT_VALUES = new Set(selectors.effort.map(e => e.value).filter(v => v !== 'auto'));
+const DEFAULT_MODEL = 'sonnet';
+
+// Map a stored config.model to a valid --model value. Old configs only ever
+// stored an alias ('sonnet'/'opus'); fold any stale full ID back to its alias,
+// and fall back to the default for anything unrecognized.
+function normalizeModel(value) {
+    if (MODEL_VALUES.has(value)) return value;
+    if (typeof value === 'string') {
+        if (value.startsWith('claude-opus')) return 'opus';
+        if (value.startsWith('claude-sonnet')) return 'sonnet';
+        if (value.startsWith('claude-haiku')) return 'haiku';
+    }
+    return DEFAULT_MODEL;
+}
 
 let mainWindow = null;
 let claudeProcess = null;
@@ -21,20 +34,25 @@ function spawnClaude() {
     stdoutBuffer = '';
 
     const config = readConfig();
-    const modelId = MODEL_IDS[config.model] || MODEL_IDS.sonnet;
-
-    // Quote the command: with shell:true the path is parsed by the shell, so a
-    // space in the path (e.g. a Windows username with a space) would otherwise
-    // split it. shell:true is required on Windows to run the .cmd.
-    claudeProcess = spawn(`"${CLAUDE_PATH}"`, [
+    const args = [
         '-p',
-        '--model', modelId,
+        '--model', normalizeModel(config.model),
         '--input-format', 'stream-json',
         '--output-format', 'stream-json',
         '--verbose',
         '--permission-mode', 'acceptEdits',
         '--no-session-persistence'
-    ], {
+    ];
+    // Effort is session-level; 'auto' = don't pass the flag (use the model's
+    // adaptive default). Only forward a value this CLI build accepts.
+    if (config.effort && config.effort !== 'auto' && EFFORT_VALUES.has(config.effort)) {
+        args.push('--effort', config.effort);
+    }
+
+    // Quote the command: with shell:true the path is parsed by the shell, so a
+    // space in the path (e.g. a Windows username with a space) would otherwise
+    // split it. shell:true is required on Windows to run the .cmd.
+    claudeProcess = spawn(`"${CLAUDE_PATH}"`, args, {
         shell: true,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: ENV

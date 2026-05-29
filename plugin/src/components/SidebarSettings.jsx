@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import SELECTORS from '../data/selectors.json';
 
 export default function SidebarSettings({ config, onConfigChange }) {
     const [update, setUpdate] = useState(null);
@@ -62,11 +63,25 @@ export default function SidebarSettings({ config, onConfigChange }) {
                 <label>Model</label>
                 <select
                     className="select"
-                    value={config.model || 'sonnet'}
+                    value={SELECTORS.models.some(m => m.value === config.model) ? config.model : 'sonnet'}
                     onChange={e => onConfigChange({ model: e.target.value })}
                 >
-                    <option value="sonnet">Sonnet · fast</option>
-                    <option value="opus">Opus · smart</option>
+                    {SELECTORS.models.map(m => (
+                        <option key={m.value} value={m.value}>{m.label} · {m.sub}</option>
+                    ))}
+                </select>
+            </div>
+
+            <div className="set-row">
+                <label>Effort</label>
+                <select
+                    className="select"
+                    value={SELECTORS.effort.some(e => e.value === config.effort) ? config.effort : 'auto'}
+                    onChange={e => onConfigChange({ effort: e.target.value })}
+                >
+                    {SELECTORS.effort.map(e => (
+                        <option key={e.value} value={e.value}>{e.label}</option>
+                    ))}
                 </select>
             </div>
 

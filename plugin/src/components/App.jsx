@@ -121,9 +121,11 @@ export default function App() {
 
     async function handleConfigChange(partial) {
         const updated = await window.configAPI.set(partial);
-        const modelChanged = partial.model && partial.model !== config.model;
+        const needsRestart =
+            (partial.model && partial.model !== config.model) ||
+            (partial.effort && partial.effort !== config.effort);
         setConfig(updated);
-        if (modelChanged && !welcomed) {
+        if (needsRestart && !welcomed) {
             setMessages([]);
             setIsProcessing(false);
             setActiveTool(null);

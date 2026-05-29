@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import SELECTORS from '../data/selectors.json';
 
 const TOOL_LABELS = {
     Read: 'Reading',
@@ -18,7 +19,7 @@ function shortPath(p) {
     return name.length > 24 ? name.slice(0, 21) + '...' : name;
 }
 
-const MODEL_LABELS = { sonnet: 'Sonnet', opus: 'Opus' };
+const MODEL_LABELS = Object.fromEntries(SELECTORS.models.map(m => [m.value, m.label]));
 
 export default function StatusIndicator({ tool, tokens, model }) {
     const [elapsed, setElapsed] = useState(0);
