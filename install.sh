@@ -13,7 +13,10 @@ fi
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_SRC="$REPO_ROOT/plugin"
 RENDERER_SRC="$PLUGIN_SRC/renderer"
+# macOS plugins dir intentionally OMITS the "Support/" segment that the
+# Windows/ProgramData path includes — this matches Blackmagic's macOS layout.
 DEST="/Library/Application Support/Blackmagic Design/DaVinci Resolve/Workflow Integration Plugins/com.clauderesolve.plugin"
+INSTALLER_VERSION='0.5.0-beta'
 
 # ---------------------------------------------------------------- colours
 ESC=$(printf '\033')
@@ -67,13 +70,14 @@ print_header() {
         "$WARM" "$RESET" "$DIM" "$RESET"
     echo
     gradient_bar
+    printf '       %sinstaller v%s%s\n' "$DIM" "$INSTALLER_VERSION" "$RESET"
     echo
 }
 
 step() {  # $1 = step number, $2 = title
-    local col; col="$(grad $(( ($1 - 1) * 100 / 8 )))"
+    local col; col="$(grad $(( ($1 - 1) * 100 / 9 )))"
     echo
-    printf '%s[%s/9]%s  %s%s%s\n' "${ESC}[38;2;${col}m" "$1" "$RESET" "$WHITE" "$2" "$RESET"
+    printf '%s[%s/10]%s  %s%s%s\n' "${ESC}[38;2;${col}m" "$1" "$RESET" "$WHITE" "$2" "$RESET"
 }
 ok()   { printf '       %s  %s%s%s\n' "$I_OK"   "$DIM"   "$1" "$RESET"; }
 warn() { printf '       %s  %s%s%s\n' "$I_WARN" "$DIM"   "$1" "$RESET"; }
@@ -227,26 +231,48 @@ if ! ( cd "$RENDERER_SRC" && npx --yes playwright install chromium ); then
 fi
 ok 'Chromium installed.'
 
-# 6 - ffmpeg
-step 6 'Checking ffmpeg'
+# 6 - Build the plugin UI (model: dist is built at install time, not committed)
+step 6 'Building the plugin UI'
+if ! ( cd "$PLUGIN_SRC" && npm install --no-audit --no-fund && npm run build ); then
+    fail 'Failed to build the plugin UI (npm install / vite build in plugin/).'
+fi
+ok 'UI built.'
+
+# 7 - ffmpeg
+step 7 'Checking ffmpeg'
 if command -v ffmpeg >/dev/null 2>&1; then
     ok 'ffmpeg found.'
 else
     warn 'ffmpeg not found on PATH. Rendering needs ffmpeg (brew install ffmpeg).'
 fi
 
-# 7 - Copy plugin into DaVinci Resolve (needs root)
-step 7 'Installing plugin into DaVinci Resolve'
+# 8 - Copy plugin into DaVinci Resolve (needs root)
+step 8 'Installing plugin into DaVinci Resolve'
 printf '       %s(your administrator password may be requested)%s\n' "$DIM" "$RESET"
-if ! sudo rm -rf "$DEST" \
-   || ! sudo mkdir -p "$DEST" \
-   || ! sudo cp -R "$PLUGIN_SRC/." "$DEST/"; then
-    fail 'Could not copy plugin files into /Library.'
+
+# A FILE squatting where a directory must be (from a prior bad install) makes
+# `mkdir -p` fail with "Not a directory". Clear the destination or its parent
+# if either exists as a non-directory, then build the path step by step so the
+# failing step is named.
+PARENT="$(dirname "$DEST")"
+if [ -e "$DEST" ] && [ ! -d "$DEST" ]; then
+    sudo rm -f "$DEST" \
+        || fail "Install failed (step 8a): could not remove a file blocking $DEST."
 fi
+if [ -e "$PARENT" ] && [ ! -d "$PARENT" ]; then
+    sudo rm -f "$PARENT" \
+        || fail "Install failed (step 8a): could not remove a file blocking $PARENT."
+fi
+sudo rm -rf "$DEST" \
+    || fail 'Install failed (step 8b): could not remove the previous plugin at the destination.'
+sudo mkdir -p "$DEST" \
+    || fail 'Install failed (step 8c): could not create the plugin destination folder.'
+sudo cp -R "$PLUGIN_SRC/." "$DEST/" \
+    || fail 'Install failed (step 8d): could not copy the plugin files into the destination.'
 ok "Installed to $DEST"
 
-# 8 - Verify
-step 8 'Verifying installation'
+# 9 - Verify
+step 9 'Verifying installation'
 for rel in manifest.xml main.js dist/index.html renderer/render.js renderer/node_modules/playwright; do
     if [ ! -e "$DEST/$rel" ]; then
         fail "Verification failed - missing: $rel"
@@ -254,7 +280,7 @@ for rel in manifest.xml main.js dist/index.html renderer/render.js renderer/node
 done
 ok 'All required files present.'
 
-# 9 - Done
-step 9 'Done'
+# 10 - Done
+step 10 'Done'
 print_success
 read -r -p "       Press Enter to exit..." _
