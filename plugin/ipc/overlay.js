@@ -11,15 +11,17 @@ const { extensionForRenderSettings, normalizeRenderSettings, proxyPathFor } = re
 const { resolveAssetReferences } = require('./assets');
 const { createRenderQueue } = require('./render-queue');
 const {
-    findExecutable, ENV,
+    findExecutable, ENV, NODE_PATH,
     RENDER_DIR, THUMBNAIL_DIR, CONFIG_DIR,
     FFMPEG_CANDIDATES, FFMPEG_VERIFY_CMD
 } = require('./paths');
 
 // Resolve executable paths at load time — Resolve's Electron has a stripped PATH
 const FFMPEG_PATH = findExecutable(FFMPEG_CANDIDATES, FFMPEG_VERIFY_CMD);
+const RENDER_START_TIMEOUT_MS = 45000;
 
 console.log('RESOLVED: ffmpeg=' + FFMPEG_PATH);
+console.log('RESOLVED: node=' + NODE_PATH);
 
 function renderFilename(name, extension = '.mov') {
     const safe = (name || 'Overlay').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -197,9 +199,9 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
     };
 
     return new Promise((resolve) => {
-        // Run render.js with the bundled Electron acting as plain Node
-        // (ELECTRON_RUN_AS_NODE) — no dependency on a system `node` or PATH.
-        const proc = spawn(process.execPath, [
+        const nodePath = fs.existsSync(NODE_PATH) ? NODE_PATH : process.execPath;
+        const usingElectronAsNode = nodePath === process.execPath;
+        const proc = spawn(nodePath, [
             renderScript, htmlPath,
             '--fps', String(fps),
             '--width', String(width),
@@ -214,14 +216,27 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
                 '--proxy-encoder', normalizedRender.proxyEncoder,
                 '--proxy-quality', normalizedRender.proxyQuality
             ] : [])
-        ], { env: { ...ENV, ELECTRON_RUN_AS_NODE: '1' } });
+        ], {
+            env: usingElectronAsNode
+                ? { ...ENV, ELECTRON_RUN_AS_NODE: '1' }
+                : ENV
+        });
         const queueId = metadata?.renderQueueId;
         if (queueId) activeRenderProcesses.set(queueId, proc);
 
         let buf = '';
         let stderrBuf = '';
+        let sawRenderOutput = false;
+        let settled = false;
+
+        const startupTimer = setTimeout(() => {
+            if (sawRenderOutput || settled) return;
+            stderrBuf += `\nRenderer produced no output after ${Math.round(RENDER_START_TIMEOUT_MS / 1000)}s. Node path: ${nodePath}`;
+            try { proc.kill(); } catch (_e) { /* ignore */ }
+        }, RENDER_START_TIMEOUT_MS);
 
         proc.stdout.on('data', (chunk) => {
+            sawRenderOutput = true;
             buf += chunk.toString();
             const lines = buf.split('\n');
             buf = lines.pop();
@@ -235,17 +250,24 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
         });
 
         proc.stderr.on('data', (chunk) => {
+            sawRenderOutput = true;
             stderrBuf += chunk.toString();
             console.log('RENDER STDERR:', chunk.toString());
         });
 
         proc.on('close', async (code) => {
+            settled = true;
+            clearTimeout(startupTimer);
             console.log('RENDER EXIT:', code, stderrBuf.slice(0, 500));
             if (queueId) activeRenderProcesses.delete(queueId);
             cleanupTempDir();
             if (code !== 0) {
                 const errMsg = stderrBuf.trim().split('\n').pop() || 'Render process exited with code ' + code;
                 resolve({ success: false, error: errMsg });
+                return;
+            }
+            if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size <= 0) {
+                resolve({ success: false, error: 'Render finished but no output file was created: ' + outputPath });
                 return;
             }
             const renderMetadata = writeRenderMetadata(outputName, {
@@ -269,6 +291,8 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
         });
 
         proc.on('error', (err) => {
+            settled = true;
+            clearTimeout(startupTimer);
             console.log('RENDER SPAWN ERROR:', err.message);
             if (queueId) activeRenderProcesses.delete(queueId);
             cleanupTempDir();

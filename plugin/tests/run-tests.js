@@ -9,6 +9,7 @@ require('./agent-logs.test');
 require('./config.test');
 require('./render-validation.test');
 require('./render-settings.test');
+require('./paths.test');
 require('./repair.test');
 require('./showcase.test');
 require('./templates.test');

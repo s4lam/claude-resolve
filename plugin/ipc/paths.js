@@ -95,6 +95,24 @@ function findCodexPath() {
 
 const CODEX_PATH = findCodexPath();
 
+const NODE_CANDIDATES = isMac
+    ? [
+        '/opt/homebrew/bin/node',
+        '/usr/local/bin/node',
+        '/usr/bin/node',
+        path.join(os.homedir(), '.npm-global', 'bin', 'node'),
+        path.join(os.homedir(), '.nvm', 'current', 'bin', 'node'),
+        'node'
+    ]
+    : [
+        path.join(process.env.PROGRAMFILES || '', 'nodejs', 'node.exe'),
+        path.join(process.env['ProgramFiles(x86)'] || '', 'nodejs', 'node.exe'),
+        'node.exe',
+        'node'
+    ];
+const NODE_VERIFY_CMD = isMac ? "zsh -lic 'command -v node' 2>/dev/null" : 'where node';
+const NODE_PATH = findExecutable(NODE_CANDIDATES, NODE_VERIFY_CMD);
+
 // Augmented environment for spawning the CLI. On macOS the launchd PATH is
 // stripped down to /usr/bin:/bin:/usr/sbin:/sbin — prepend the resolved
 // CLI's own bin dir plus the common Homebrew/Node locations so `claude`
@@ -103,9 +121,11 @@ function buildEnv() {
     if (!isMac) return process.env;
     const claudeDir = path.dirname(CLAUDE_PATH);
     const codexDir = path.dirname(CODEX_PATH);
+    const nodeDir = path.dirname(NODE_PATH);
     const prepend = [
         (claudeDir && claudeDir !== '.') ? claudeDir : null,
         (codexDir && codexDir !== '.') ? codexDir : null,
+        (nodeDir && nodeDir !== '.') ? nodeDir : null,
         '/usr/local/bin',
         '/opt/homebrew/bin'
     ].filter(Boolean);
@@ -137,6 +157,7 @@ module.exports = {
     findExecutable,
     CLAUDE_PATH,
     CODEX_PATH,
+    NODE_PATH,
     ENV,
     RENDER_DIR,
     THUMBNAIL_DIR,
