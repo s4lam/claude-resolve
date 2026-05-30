@@ -284,7 +284,7 @@ function parseArgs(argv) {
     };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
-        if (a === '--fps') args.fps = parseInt(argv[++i], 10);
+        if (a === '--fps') args.fps = parseFloat(argv[++i]);
         else if (a === '--width') args.width = parseInt(argv[++i], 10);
         else if (a === '--height') args.height = parseInt(argv[++i], 10);
         else if (a === '--output') args.output = argv[++i];

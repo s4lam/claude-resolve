@@ -226,6 +226,7 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
 
         let buf = '';
         let stderrBuf = '';
+        let renderMessages = [];
         let sawRenderOutput = false;
         let settled = false;
 
@@ -244,6 +245,9 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
                 if (!line.trim()) continue;
                 try {
                     const msg = JSON.parse(line);
+                    if (msg?.type === 'error' || msg?.type === 'warning') {
+                        renderMessages.push(msg);
+                    }
                     mainWindow.webContents.send('overlay:renderProgress', msg);
                 } catch (_e) { /* ignore non-JSON */ }
             }
@@ -262,7 +266,9 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
             if (queueId) activeRenderProcesses.delete(queueId);
             cleanupTempDir();
             if (code !== 0) {
-                const errMsg = stderrBuf.trim().split('\n').pop() || 'Render process exited with code ' + code;
+                const rendererError = [...renderMessages].reverse().find((msg) => msg.type === 'error' && msg.message)?.message;
+                const stderrError = stderrBuf.trim().split('\n').filter(Boolean).pop();
+                const errMsg = rendererError || stderrError || 'Render process exited with code ' + code;
                 resolve({ success: false, error: errMsg });
                 return;
             }
