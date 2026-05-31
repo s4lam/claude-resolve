@@ -69,6 +69,8 @@ for (const file of ['README.md', 'CONTRIBUTING.md', 'RELEASE_NOTES.md', 'LICENSE
     if (fs.existsSync(source)) copyRecursive(source, path.join(stageDir, file));
 }
 
+execFileSync(process.execPath, [path.join(root, 'scripts', 'validate-release-package.js'), stageDir], { stdio: 'inherit' });
+
 for (const zipName of zipNames) {
     fs.rmSync(path.join(outDir, zipName), { force: true });
 }

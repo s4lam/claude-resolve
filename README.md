@@ -2,7 +2,7 @@
 
 **AI motion graphics inside DaVinci Resolve.**
 
-Resolve AI is a creator-focused DaVinci Resolve Studio Workflow Integration Plugin for generating motion graphics with local AI CLIs. Describe a title card, lower third, transition, caption overlay, logo reveal, or template idea, then preview, render, and add it to your timeline.
+Resolve AI is a creator-focused DaVinci Resolve Studio Workflow Integration Plugin for AI motion graphics, clip discovery, captions, templates, and render packaging. Describe a title card, lower third, transition, caption overlay, logo reveal, or template idea, then preview, render, and add it to your timeline.
 
 This project is an independent fork of [Claude Resolve](https://github.com/olegkupshukov/claude-resolve). It keeps Claude compatibility and adds Codex support, provider-neutral UI, asset-aware generation, render presets, sessions, prompt galleries, templates, and creator workflow tools.
 
@@ -20,6 +20,9 @@ Official fork repository: [s4lam/resolve-ai](https://github.com/s4lam/resolve-ai
 - **Prompt Gallery + Templates**: reusable local prompt and template packs.
 - **Asset-aware generation**: attach logos, product images, textures, references, and brand notes.
 - **Timeline tools**: generate titles, lower thirds, transitions, and marker-based graphics with timeline context where Resolve exposes it.
+- **AI Clip Finder**: turn one long Media Pool clip plus a timestamped transcript into scored standalone Shorts candidates, timelines, marker exports, and post packages.
+- **One-click updates**: check, download, and stage GitHub Release updates from inside the plugin.
+- **AI Rough Cut**: create non-destructive stitched rough-cut timelines from reviewed keep ranges.
 - **Caption workflows**: import SRT/VTT or paste transcript text and create transparent caption overlays.
 - **Local-first**: assets, transcripts, renders, templates, sessions, and provider auth stay on your machine.
 
@@ -57,13 +60,17 @@ Resolve AI uses each CLI's own local auth. It does not ask for, store, or sync O
 
 ### Recommended Release Install
 
-1. Download the latest release ZIP from this fork's GitHub Releases.
+1. Download the latest release ZIP from this fork's GitHub Releases:
+   - Windows: `ResolveAI-Windows-vX.Y.Z.zip`
+   - macOS: `ResolveAI-macOS-vX.Y.Z.zip`
 2. Extract the ZIP.
 3. Run the installer:
    - Windows: double-click `install.bat`
    - macOS: double-click `install.command`
-4. Restart DaVinci Resolve.
+4. Restart DaVinci Resolve after install.
 5. Open **Workspace > Workflow Integration > Resolve AI**.
+
+Use release ZIPs for normal installs. Source installs are for contributors because they require Node dependencies and a local build.
 
 ### Install From Source
 
@@ -106,6 +113,26 @@ bash install.command
 
 Rendered files are stored locally in the Resolve AI render history and imported into the current timeline when Resolve allows it.
 
+### AI Clip Finder
+
+1. Select one video clip in the Resolve Media Pool. Compound clips work only if they are Media Pool items with readable timing.
+2. Open **Tools > Clip Finder**.
+3. Import an SRT, VTT, or timestamped TXT transcript. Untimestamped TXT cannot create frame-accurate Shorts timelines.
+4. Choose a goal preset such as viral moment, funny clip, lesson, story, debate/reaction, or strong quote. Optional local transcript generation appears only when Resolve transcription, Whisper, or whisper.cpp is detected/configured.
+5. Review hook/setup/payoff/ending, rubric scores, and “why this might work.” Select the Shorts you want, then click **Create timelines**, **Package selected**, **Export markers**, or **Create + package**.
+
+AI Clip Finder creates one new timeline per selected candidate. It saves selected/rejected feedback locally so future prompts can reflect your creator preferences. It does not modify the original clip or your current timeline.
+
+### Local Transcription
+
+Transcript import is the reliable default. AI Clip Finder can also show **Generate transcript locally** when one of these is available:
+
+- Resolve `TranscribeAudio`, when exposed by your Resolve version.
+- `whisper` from OpenAI Whisper.
+- `whisper-cli` / whisper.cpp with a configured local model path.
+
+Media stays local during local transcription. Transcript text may still be sent to the selected AI provider when you ask it to find clips or generate edits.
+
 ## Example Prompts
 
 | Goal | Prompt |
@@ -124,11 +151,14 @@ Rendered files are stored locally in the Resolve AI render history and imported 
 - **Regenerate actions**: more cinematic, simpler, transparent background, longer, same style, three variations.
 - **Brand Kit**: colors, fonts, logo path, tone, and repeated phrases.
 - **Asset Library**: drag/drop assets, categories, notes, health checks, selected-asset prompt injection.
+- **AI Clip Finder**: standalone clip candidates with scoring rubric, hook/setup/payoff/ending, local preference learning, platform checks, marker export, caption prompts, and post text.
+- **AI Rough Cut + IntelliScript Bridge**: reviewed keep ranges, non-destructive timelines, markers, and clean TXT export for native IntelliScript.
 - **Template Library**: save generated overlays and reuse them later.
 - **Prompt Gallery**: built-in creator, podcast, gaming, product, documentary, business, social, event, sports, and music ideas.
 - **Community template packs**: local JSON packs with validation.
 - **Caption Studio**: SRT/VTT parsing and caption style prompts.
 - **Render history**: thumbnails, rename, reveal, delete, sync, and re-render.
+- **One-click updater**: download and stage release updates while DaVinci Resolve stays open.
 - **Showcase builder**: export a local static page from saved templates and renders.
 - **Debug bundle**: collect useful diagnostics for issue reports.
 
@@ -138,6 +168,7 @@ Rendered files are stored locally in the Resolve AI render history and imported 
 - Provider login is handled by the provider CLI.
 - Template pack URL installs block localhost, private network ranges, link-local metadata addresses, and unsafe redirects.
 - Generated files, assets, sessions, captions, templates, and renders stay local.
+- Transcript text and prompts may be sent to the selected AI provider when you ask it to generate candidates or edits.
 
 ## Compatibility Notes
 
@@ -156,6 +187,11 @@ Do not rename those unless you are ready to migrate existing user data and insta
 - **Installer says `missing: data/builtin-template-packs.json`**: update to the latest release ZIP and rerun the installer.
 - **macOS says unidentified developer**: right-click `install.command`, choose **Open**, then confirm.
 - **Render does nothing on macOS**: update to the latest fork version. The renderer now uses the installed Node runtime and shows visible render failures.
+- **Render fails on macOS with no file**: check Settings > Diagnostics raw logs, confirm `ffmpeg` is installed, and use a writable render folder.
+- **Codex or Claude says login/auth failed**: run `codex login` or `claude login` in Terminal, then reopen Resolve AI.
+- **AI Clip Finder cannot create timelines**: select exactly one Media Pool video clip and use a timestamped transcript. If Resolve does not expose FPS, duration, or source start timecode/frame, timeline creation is blocked.
+- **Generate transcript locally is hidden**: install/configure Whisper or whisper.cpp, or use Resolve transcription when available. SRT/VTT/timestamped TXT import is still the reliable default.
+- **Update button cannot install**: install manually from the latest release ZIP. Protected plugin folders can still require Windows UAC or macOS admin permission.
 - **MP4 is not transparent**: use **ProRes MOV**. MP4 presets flatten alpha.
 
 ## Development
@@ -163,11 +199,13 @@ Do not rename those unless you are ready to migrate existing user data and insta
 ```bash
 npm --prefix plugin test
 npm --prefix plugin run build
+npm --prefix plugin run smoke
 ```
 
 Package a release ZIP:
 
 ```bash
+npm --prefix plugin run validate:release
 npm --prefix plugin run package:release
 ```
 

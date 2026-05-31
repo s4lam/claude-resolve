@@ -126,6 +126,40 @@ contextBridge.exposeInMainWorld('captionAPI', {
     generate: (payload) => ipcRenderer.invoke('captions:generate', payload)
 });
 
+contextBridge.exposeInMainWorld('roughCutAPI', {
+    getSelectedMedia: () => ipcRenderer.invoke('roughCut:getSelectedMedia'),
+    importTranscript: (payload) => ipcRenderer.invoke('roughCut:importTranscript', payload),
+    buildCutPlan: (payload) => ipcRenderer.invoke('roughCut:buildCutPlan', payload),
+    buildShortsPlan: (payload) => ipcRenderer.invoke('roughCut:buildShortsPlan', payload),
+    validateCutPlan: (payload) => ipcRenderer.invoke('roughCut:validateCutPlan', payload),
+    validateShortsPlan: (payload) => ipcRenderer.invoke('roughCut:validateShortsPlan', payload),
+    applyCutPlan: (payload) => ipcRenderer.invoke('roughCut:applyCutPlan', payload),
+    applyShortsPlan: (payload) => ipcRenderer.invoke('roughCut:applyShortsPlan', payload),
+    exportIntelliScript: (payload) => ipcRenderer.invoke('roughCut:exportIntelliScript', payload),
+    detectFeatures: () => ipcRenderer.invoke('roughCut:detectFeatures'),
+    prepareNativeIntelliScript: (payload) => ipcRenderer.invoke('roughCut:prepareNativeIntelliScript', payload),
+    listPlans: () => ipcRenderer.invoke('roughCut:listPlans'),
+    getPlan: (id) => ipcRenderer.invoke('roughCut:getPlan', id),
+    deletePlan: (id) => ipcRenderer.invoke('roughCut:deletePlan', id)
+});
+
+contextBridge.exposeInMainWorld('shortsAPI', {
+    getSource: () => ipcRenderer.invoke('shorts:getSource'),
+    importTranscript: (payload) => ipcRenderer.invoke('shorts:importTranscript', payload),
+    buildCandidates: (payload) => ipcRenderer.invoke('shorts:buildCandidates', payload),
+    validateCandidates: (payload) => ipcRenderer.invoke('shorts:validateCandidates', payload),
+    createTimelines: (payload) => ipcRenderer.invoke('shorts:createTimelines', payload),
+    packageSelected: (payload) => ipcRenderer.invoke('shorts:packageSelected', payload),
+    detectTranscribers: () => ipcRenderer.invoke('shorts:detectTranscribers'),
+    transcribeSource: (payload) => ipcRenderer.invoke('shorts:transcribeSource', payload),
+    saveCandidateFeedback: (payload) => ipcRenderer.invoke('shorts:saveCandidateFeedback', payload),
+    getCreatorProfile: () => ipcRenderer.invoke('shorts:getCreatorProfile'),
+    exportMarkers: (payload) => ipcRenderer.invoke('shorts:exportMarkers', payload),
+    listProjects: () => ipcRenderer.invoke('shorts:listProjects'),
+    getProject: (id) => ipcRenderer.invoke('shorts:getProject', id),
+    deleteProject: (id) => ipcRenderer.invoke('shorts:deleteProject', id)
+});
+
 contextBridge.exposeInMainWorld('variationAPI', {
     generate: (payload) => ipcRenderer.invoke('variations:generate', payload),
     generateMultiPrompt: (payload) => ipcRenderer.invoke('variations:generateMultiPrompt', payload)

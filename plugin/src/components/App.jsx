@@ -67,6 +67,16 @@ function latestHtmlContext(messages = []) {
     return null;
 }
 
+function latestAssistantTextContext(messages = []) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+        if (message?.type === 'assistant' && !message.isThinking && message.text) {
+            return message.text;
+        }
+    }
+    return '';
+}
+
 function buildSessionContinuationPrompt(promptText, session, messages = []) {
     const recentTurns = messages
         .filter(message => !message.isThinking && message.text)
@@ -111,6 +121,7 @@ export default function App() {
         selectedAssetIds: [],
         generation: { variationCount: 3, locks: {} },
         captions: { defaultStyle: 'clean' },
+        transcription: { provider: 'none', commandPath: '', model: 'base', language: '' },
         assets: { maxImportSizeMb: 25 },
         render: {
             renderPreset: 'prores_mov',
@@ -612,6 +623,7 @@ export default function App() {
     const chromeProvider = activeProvider || authInfo.provider || config.provider;
     const chromeModel = chromeProvider === 'codex' ? config.codexModel : config.model;
     const latestGeneration = useMemo(() => latestHtmlContext(messages), [messages]);
+    const latestAssistantText = useMemo(() => latestAssistantTextContext(messages), [messages]);
 
     return (
         <>
@@ -637,6 +649,7 @@ export default function App() {
                         onRenameSession={handleRenameSession}
                         onDeleteSession={handleDeleteSession}
                         latestGeneration={latestGeneration}
+                        latestAssistantText={latestAssistantText}
                     />
                 )}
                 <div className="main">

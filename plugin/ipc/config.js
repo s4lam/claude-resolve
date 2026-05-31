@@ -36,6 +36,12 @@ const DEFAULTS = {
     captions: {
         defaultStyle: 'clean'
     },
+    transcription: {
+        provider: 'none',
+        commandPath: '',
+        model: 'base',
+        language: ''
+    },
     assets: {
         maxImportSizeMb: 25
     },
@@ -82,6 +88,7 @@ function mergeConfig(parsed = {}) {
             }
         },
         captions: { ...(DEFAULTS.captions || {}), ...(parsed.captions || {}) },
+        transcription: { ...(DEFAULTS.transcription || {}), ...(parsed.transcription || {}) },
         assets: { ...(DEFAULTS.assets || {}), ...(parsed.assets || {}) },
         render: mergeRenderSettings(DEFAULTS.render || {}, parsed.render || {}),
         ui: { ...(DEFAULTS.ui || {}), ...(parsed.ui || {}) },

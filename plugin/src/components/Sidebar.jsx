@@ -9,11 +9,15 @@ import SidebarTemplates from './SidebarTemplates';
 import SidebarCreate from './SidebarCreate';
 import SidebarTimeline from './SidebarTimeline';
 import SidebarVariations from './SidebarVariations';
+import SidebarRoughCut from './SidebarRoughCut';
+import SidebarShortsStudio from './SidebarShortsStudio';
 
 const TOOL_TABS = [
     ['sessions', 'Sessions'],
     ['create', 'Create'],
     ['timeline', 'Timeline'],
+    ['shorts-studio', 'Clip Finder'],
+    ['rough-cut', 'Rough Cut'],
     ['assets', 'Assets'],
     ['variations', 'Variations'],
     ['captions', 'Captions'],
@@ -36,7 +40,8 @@ export default function Sidebar({
     onOpenSession,
     onRenameSession,
     onDeleteSession,
-    latestGeneration
+    latestGeneration,
+    latestAssistantText
 }) {
     const [activeTool, setActiveTool] = useState(config?.ui?.activeToolTab || 'create');
 
@@ -68,6 +73,8 @@ export default function Sidebar({
         }
         if (activeTool === 'create') return <SidebarCreate config={config} onConfigChange={onConfigChange} latestGeneration={latestGeneration} onPrompt={onPrompt} />;
         if (activeTool === 'timeline') return <SidebarTimeline config={config} onPrompt={onUsePrompt || onPrompt} />;
+        if (activeTool === 'shorts-studio') return <SidebarShortsStudio latestAssistantText={latestAssistantText} onPrompt={onPrompt} />;
+        if (activeTool === 'rough-cut') return <SidebarRoughCut config={config} latestAssistantText={latestAssistantText} onPrompt={onPrompt} />;
         if (activeTool === 'variations') return <SidebarVariations config={config} onConfigChange={onConfigChange} latestGeneration={latestGeneration} onPrompt={onPrompt} onUsePrompt={onUsePrompt || onPrompt} />;
         if (activeTool === 'renders') return <SidebarAssets onPrompt={onUsePrompt || onPrompt} />;
         if (activeTool === 'gallery') return <SidebarPromptGallery config={config} onConfigChange={onConfigChange} onPrompt={onUsePrompt || onPrompt} />;

@@ -13,6 +13,8 @@ async function run() {
     require('./render-settings.test');
     require('./paths.test');
     require('./repair.test');
+    require('./rough-cut.test');
+    require('./shorts-studio.test');
     require('./showcase.test');
     require('./templates.test');
     require('./template-packs.test');
