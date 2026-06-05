@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import SidebarAssetLibrary from './SidebarAssetLibrary';
 import SidebarAssets from './SidebarAssets';
 import SidebarCaptions from './SidebarCaptions';
@@ -11,20 +11,36 @@ import SidebarTimeline from './SidebarTimeline';
 import SidebarVariations from './SidebarVariations';
 import SidebarRoughCut from './SidebarRoughCut';
 import SidebarShortsStudio from './SidebarShortsStudio';
+import SidebarOgraph from './SidebarOgraph';
+import SidebarManimLab from './SidebarManimLab';
 
 const TOOL_TABS = [
-    ['sessions', 'Sessions'],
-    ['create', 'Create'],
-    ['timeline', 'Timeline'],
-    ['shorts-studio', 'Clip Finder'],
-    ['rough-cut', 'Rough Cut'],
-    ['assets', 'Assets'],
-    ['variations', 'Variations'],
-    ['captions', 'Captions'],
-    ['gallery', 'Gallery'],
-    ['templates', 'Templates'],
-    ['renders', 'Renders'],
+    { id: 'sessions', label: 'Sessions', modes: ['create', 'produce', 'discover'] },
+    { id: 'create', label: 'Create', modes: ['create'] },
+    { id: 'assets', label: 'Assets', modes: ['create'] },
+    { id: 'ograph', label: 'Ograph', modes: ['create', 'produce'] },
+    { id: 'manim', label: 'Manim Lab', modes: ['create', 'produce'] },
+    { id: 'variations', label: 'Variations', modes: ['create'] },
+    { id: 'gallery', label: 'Gallery', modes: ['create'] },
+    { id: 'templates', label: 'Templates', modes: ['create'] },
+    { id: 'timeline', label: 'Timeline', modes: ['produce'] },
+    { id: 'captions', label: 'Captions', modes: ['produce'] },
+    { id: 'renders', label: 'Renders', modes: ['produce'] },
+    { id: 'shorts-studio', label: 'Clip Finder', modes: ['discover'] },
+    { id: 'rough-cut', label: 'Rough Cut', modes: ['discover'] },
 ];
+
+function workspaceTitle(mode) {
+    if (mode === 'produce') return 'Produce';
+    if (mode === 'discover') return 'Discover';
+    return 'Create';
+}
+
+const DEFAULT_TOOL_BY_WORKSPACE = {
+    create: 'create',
+    produce: 'timeline',
+    discover: 'shorts-studio'
+};
 
 export default function Sidebar({
     view = 'tools',
@@ -41,9 +57,45 @@ export default function Sidebar({
     onRenameSession,
     onDeleteSession,
     latestGeneration,
-    latestAssistantText
+    latestAssistantText,
+    sourceDraft,
+    workspaceMode = 'create'
 }) {
     const [activeTool, setActiveTool] = useState(config?.ui?.activeToolTab || 'create');
+    const [focusedOgraphId, setFocusedOgraphId] = useState('');
+    const [manimDraft, setManimDraft] = useState(null);
+    const visibleTabs = useMemo(
+        () => TOOL_TABS.filter(tab => tab.modes.includes(workspaceMode || 'create')),
+        [workspaceMode]
+    );
+
+    useEffect(() => {
+        if (view !== 'tools') return;
+        if (visibleTabs.some(tab => tab.id === activeTool)) return;
+        const preferredTool = DEFAULT_TOOL_BY_WORKSPACE[workspaceMode] || 'create';
+        const nextTool = visibleTabs.find(tab => tab.id === preferredTool)?.id || visibleTabs[0]?.id || 'create';
+        openTool(nextTool);
+    }, [activeTool, onConfigChange, view, visibleTabs]);
+
+    useEffect(() => {
+        if (view !== 'tools') return;
+        const requestedTool = config?.ui?.activeToolTab;
+        if (!requestedTool || requestedTool === activeTool) return;
+        if (!visibleTabs.some(tab => tab.id === requestedTool)) return;
+        setActiveTool(requestedTool);
+    }, [activeTool, config?.ui?.activeToolTab, view, visibleTabs]);
+
+    useEffect(() => {
+        if (view !== 'tools') return;
+        if (config?.ui?.focusOgraphId) {
+            setFocusedOgraphId(config.ui.focusOgraphId);
+        }
+    }, [config?.ui?.focusOgraphId, view]);
+
+    useEffect(() => {
+        if (!sourceDraft?.source) return;
+        openTool('manim', sourceDraft);
+    }, [sourceDraft?.revision]);
 
     if (view === 'settings') {
         return (
@@ -73,6 +125,8 @@ export default function Sidebar({
         }
         if (activeTool === 'create') return <SidebarCreate config={config} onConfigChange={onConfigChange} latestGeneration={latestGeneration} onPrompt={onPrompt} />;
         if (activeTool === 'timeline') return <SidebarTimeline config={config} onPrompt={onUsePrompt || onPrompt} />;
+        if (activeTool === 'ograph') return <SidebarOgraph config={config} activeSession={activeSession} latestGeneration={latestGeneration} focusGraphId={focusedOgraphId} onPrompt={onPrompt} onUsePrompt={onUsePrompt || onPrompt} onOpenManim={(payload) => openTool('manim', payload)} />;
+        if (activeTool === 'manim') return <SidebarManimLab config={config} latestGeneration={latestGeneration} latestAssistantText={latestAssistantText} sourceDraft={manimDraft} onPrompt={onPrompt} onUsePrompt={onUsePrompt || onPrompt} onOpenOgraph={(graphId) => openTool('ograph', { graphId })} />;
         if (activeTool === 'shorts-studio') return <SidebarShortsStudio latestAssistantText={latestAssistantText} onPrompt={onPrompt} />;
         if (activeTool === 'rough-cut') return <SidebarRoughCut config={config} latestAssistantText={latestAssistantText} onPrompt={onPrompt} />;
         if (activeTool === 'variations') return <SidebarVariations config={config} onConfigChange={onConfigChange} latestGeneration={latestGeneration} onPrompt={onPrompt} onUsePrompt={onUsePrompt || onPrompt} />;
@@ -83,18 +137,35 @@ export default function Sidebar({
         return <SidebarAssetLibrary config={config} onConfigChange={onConfigChange} onPrompt={onUsePrompt || onPrompt} />;
     }
 
-    function handleToolSelect(id) {
+    function openTool(id, options = {}) {
+        if (id === 'ograph' && options.graphId) setFocusedOgraphId(options.graphId);
+        if (id === 'manim' && (options.source || options.idea || options.graphId)) {
+            setManimDraft({
+                source: options.source || '',
+                idea: options.idea || '',
+                title: options.title || '',
+                origin: options.origin || (options.graphId ? 'ograph' : ''),
+                graphId: options.graphId || '',
+                revision: Date.now()
+            });
+        }
         setActiveTool(id);
         onConfigChange?.({ ui: { activeToolTab: id } });
     }
+
+    function handleToolSelect(id) {
+        openTool(id);
+    }
+
+    const activeTab = TOOL_TABS.find(tab => tab.id === activeTool);
 
     return (
         <aside className="sb sb-tools-view">
             <div className="tools-header">
                 <div className="tools-heading">
                     <span className="tools-eyebrow">Resolve AI</span>
-                    <h2>Tools</h2>
-                    <p>{TOOL_TABS.find(([id]) => id === activeTool)?.[1] || 'Assets'}</p>
+                    <h2>{workspaceTitle(workspaceMode)} Tools</h2>
+                    <p>{activeTab?.label || 'Assets'}</p>
                 </div>
                 {onClose && (
                     <button className="tools-close" onClick={onClose} aria-label="Close tools">
@@ -103,7 +174,7 @@ export default function Sidebar({
                 )}
             </div>
             <div className="tools-tabs" role="tablist" aria-label="Tool sections">
-                {TOOL_TABS.map(([id, label]) => (
+                {visibleTabs.map(({ id, label }) => (
                     <button
                         type="button"
                         role="tab"

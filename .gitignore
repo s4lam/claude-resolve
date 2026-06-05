@@ -6,6 +6,7 @@ __pycache__/
 *.mov
 config.json
 dist/release/
+artifacts/
 
 # Local working dirs — not part of the repo
 Resolve AI-handoff_design_v1/

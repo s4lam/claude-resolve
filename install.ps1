@@ -451,12 +451,19 @@ if ($exit -ne 0) { Fail 'Playwright Chromium download failed.' }
 Ok 'Chromium installed.'
 
 # 6 - ffmpeg
-Step 6 'Checking ffmpeg'
-if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
-    Ok 'ffmpeg found.'
-} else {
-    Warn 'ffmpeg not found on PATH. Install it (e.g. winget install Gyan.FFmpeg, or choco install ffmpeg), then reopen your terminal.'
+Step 6 'Checking render dependencies'
+$renderDepsCheck = Join-Path $PluginSrc 'scripts\check-render-deps.js'
+if (-not (Test-Path $renderDepsCheck)) {
+    Fail 'Render dependency self-test is missing from plugin\scripts.'
 }
+Push-Location $PluginSrc
+& node $renderDepsCheck
+$renderDepsExit = $LASTEXITCODE
+Pop-Location
+if ($renderDepsExit -ne 0) {
+    Fail 'Render dependency self-test failed. Re-run this installer with internet access, or install FFmpeg manually with winget install Gyan.FFmpeg.'
+}
+Ok 'Render dependencies ready.'
 
 # 7 - Copy plugin into DaVinci Resolve (elevated — the only step that needs admin)
 Step 7 'Installing plugin into DaVinci Resolve'
@@ -481,15 +488,19 @@ $required = @(
     'ipc\codex.js',
     'ipc\codex-parser.js',
     'ipc\codex-stderr-filter.js',
+    'ipc\render-health.js',
     'ipc\render-validation.js',
     'ipc\repair.js',
+    'ipc\runtime-qa.js',
     'ipc\showcase.js',
     'ipc\template-packs.js',
     'ipc\templates.js',
     'ipc\updates.js',
     'dist\index.html',
     'renderer\render.js',
+    'renderer\node_modules\ffmpeg-static',
     'renderer\node_modules\playwright',
+    'scripts\check-render-deps.js',
     'updater\install-update.ps1',
     'updater\install-update.sh'
 )

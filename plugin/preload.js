@@ -28,6 +28,9 @@ contextBridge.exposeInMainWorld('timelineAPI', {
 contextBridge.exposeInMainWorld('overlayAPI', {
     renderMov: (data) => ipcRenderer.invoke('overlay:renderMov', data),
     validate: (data) => ipcRenderer.invoke('overlay:validate', data),
+    getRenderHealth: () => ipcRenderer.invoke('overlay:getRenderHealth'),
+    repairRenderDeps: () => ipcRenderer.invoke('overlay:repairRenderDeps'),
+    getLastRenderError: () => ipcRenderer.invoke('overlay:getLastRenderError'),
     onRenderProgress: (callback) => {
         const handler = (_e, data) => callback(data);
         ipcRenderer.on('overlay:renderProgress', handler);
@@ -37,8 +40,10 @@ contextBridge.exposeInMainWorld('overlayAPI', {
     deleteRender: (name) => ipcRenderer.invoke('renders:delete', name),
     renameRender: (name, nextName) => ipcRenderer.invoke('renders:rename', name, nextName),
     revealRender: (name) => ipcRenderer.invoke('renders:reveal', name),
+    addRenderToTimeline: (name) => ipcRenderer.invoke('renders:addToTimeline', name),
     deleteAllRenders: () => ipcRenderer.invoke('renders:deleteAll'),
     syncToMediaPool: () => ipcRenderer.invoke('renders:syncToMediaPool'),
+    openFolder: () => ipcRenderer.invoke('renders:openFolder'),
     queue: (payload) => ipcRenderer.invoke('renders:queue', payload)
 });
 
@@ -99,6 +104,25 @@ contextBridge.exposeInMainWorld('sessionsAPI', {
     delete: (id) => ipcRenderer.invoke('sessions:delete', id),
     setActive: (id) => ipcRenderer.invoke('sessions:setActive', id),
     getActive: () => ipcRenderer.invoke('sessions:getActive')
+});
+
+contextBridge.exposeInMainWorld('ographAPI', {
+    list: () => ipcRenderer.invoke('ograph:list'),
+    get: (id) => ipcRenderer.invoke('ograph:get', id),
+    save: (payload) => ipcRenderer.invoke('ograph:save', payload),
+    update: (id, patch) => ipcRenderer.invoke('ograph:update', id, patch),
+    delete: (id) => ipcRenderer.invoke('ograph:delete', id),
+    createFromGeneration: (payload) => ipcRenderer.invoke('ograph:createFromGeneration', payload),
+    createFromManim: (payload) => ipcRenderer.invoke('ograph:createFromManim', payload),
+    buildPrompt: (graph, action) => ipcRenderer.invoke('ograph:buildPrompt', graph, action)
+});
+
+contextBridge.exposeInMainWorld('manimAPI', {
+    detect: (options) => ipcRenderer.invoke('manim:detect', options),
+    getStarterScenes: () => ipcRenderer.invoke('manim:getStarterScenes'),
+    buildPrompt: (payload) => ipcRenderer.invoke('manim:buildPrompt', payload),
+    validateSource: (source) => ipcRenderer.invoke('manim:validateSource', source),
+    renderScene: (payload) => ipcRenderer.invoke('manim:renderScene', payload)
 });
 
 contextBridge.exposeInMainWorld('assetAPI', {
@@ -167,6 +191,10 @@ contextBridge.exposeInMainWorld('variationAPI', {
 
 contextBridge.exposeInMainWorld('debugAPI', {
     createBundle: (options) => ipcRenderer.invoke('debug:createBundle', options)
+});
+
+contextBridge.exposeInMainWorld('runtimeQAAPI', {
+    run: () => ipcRenderer.invoke('runtimeQA:run')
 });
 
 contextBridge.exposeInMainWorld('showcaseAPI', {

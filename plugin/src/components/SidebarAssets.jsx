@@ -78,6 +78,40 @@ export default function SidebarAssets({ onPrompt }) {
         onPrompt(rerenderPrompt(render), { displayText: `Re-render: ${render.name}` });
     }
 
+    async function handleCreateOgraph(render) {
+        if (!window.ographAPI?.createFromGeneration) return;
+        const metadata = render.metadata || {};
+        setSyncStatus('Saving Ograph');
+        try {
+            await window.ographAPI.createFromGeneration({
+                source: 'render',
+                prompt: metadata.prompt || render.name,
+                generation: {
+                    name: metadata.title || render.name,
+                    html: metadata.html || ''
+                },
+                provider: metadata.provider || '',
+                model: metadata.model || '',
+                width: metadata.width || 1920,
+                height: metadata.height || 1080,
+                fps: metadata.fps || 25,
+                rendered: true,
+                render: {
+                    ...metadata,
+                    name: render.name,
+                    path: render.path
+                },
+                timelineName: metadata.timelineName || '',
+                validationWarnings: metadata.validationWarnings || []
+            });
+            setSyncStatus('Ograph saved');
+            window.dispatchEvent(new CustomEvent('resolve-ai:ographs-changed'));
+        } catch {
+            setSyncStatus('Ograph failed');
+        }
+        setTimeout(() => setSyncStatus(null), 3000);
+    }
+
     async function handleSync() {
         setSyncStatus('syncing');
         try {
@@ -172,6 +206,7 @@ export default function SidebarAssets({ onPrompt }) {
                                 </div>
                                 <div className="render-actions">
                                     <button className="mini-action" onClick={() => handleRerender(r)}>Re-render</button>
+                                    <button className="mini-action" onClick={() => handleCreateOgraph(r)}>Ograph</button>
                                     <button className="mini-action" onClick={() => handleRename(r)}>Rename</button>
                                 </div>
                             </div>

@@ -173,5 +173,7 @@
     --duration-slow:   320ms;
 
     /* ───────────── Layout ───────────── */
-    --sidebar-width: 360px;
+    --workspace-rail-width: 92px;
+    --workspace-inspector-width: 300px;
+    --sidebar-width: 384px;
 }

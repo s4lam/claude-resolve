@@ -53,6 +53,18 @@ const FONT_FACES = [
     ['JetBrains Mono', path.join(FONTS_DIR, 'JetBrainsMono-VF.woff2'), 'woff2', '100 800'],
 ];
 
+function defaultFfmpegPath() {
+    if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
+    try {
+        const bundled = require('ffmpeg-static');
+        if (bundled && fs.existsSync(bundled)) return bundled;
+    } catch (_err) {
+        // The main process normally passes --ffmpeg. This fallback keeps the
+        // renderer usable from the command line and installer self-tests.
+    }
+    return 'ffmpeg';
+}
+
 function emit(msg) {
     process.stdout.write(JSON.stringify(msg) + '\n');
 }
@@ -273,10 +285,11 @@ function parseArgs(argv) {
         width: 1920,
         height: 1080,
         output: null,
-        ffmpeg: 'ffmpeg',
+        ffmpeg: defaultFfmpegPath(),
         htmlPath: null,
         outputFormat: 'prores',
         proresProfile: '4444',
+        hevcEncoder: 'auto',
         ffmpegThreads: 'auto',
         proxyOutput: null,
         proxyEncoder: 'auto',
@@ -291,6 +304,7 @@ function parseArgs(argv) {
         else if (a === '--ffmpeg') args.ffmpeg = argv[++i];
         else if (a === '--output-format') args.outputFormat = String(argv[++i] || 'prores').toLowerCase();
         else if (a === '--prores-profile') args.proresProfile = String(argv[++i] || '4444').toLowerCase();
+        else if (a === '--hevc-encoder') args.hevcEncoder = String(argv[++i] || 'auto').toLowerCase();
         else if (a === '--ffmpeg-threads') args.ffmpegThreads = String(argv[++i] || 'auto');
         else if (a === '--proxy-output') args.proxyOutput = argv[++i];
         else if (a === '--proxy-encoder') args.proxyEncoder = String(argv[++i] || 'auto');
@@ -323,6 +337,17 @@ function proxyEncoderValue(value) {
     return 'libx264';
 }
 
+function platformDefaultHevcEncoder() {
+    if (process.platform === 'darwin') return 'hevc_videotoolbox';
+    return 'hevc_nvenc';
+}
+
+function hevcEncoderValue(value) {
+    if (value === 'auto' || !value) return platformDefaultHevcEncoder();
+    if (['hevc_nvenc', 'hevc_videotoolbox'].includes(value)) return value;
+    return platformDefaultHevcEncoder();
+}
+
 function proxyQualityArgs(encoder, quality) {
     const q = ['small', 'balanced', 'high'].includes(quality) ? quality : 'balanced';
     if (encoder === 'h264_nvenc') {
@@ -339,14 +364,33 @@ function proxyQualityArgs(encoder, quality) {
 
 function finalOutputArgs(args, framesDir, threads) {
     if (args.outputFormat === 'hevc_nvenc_hq') {
+        const encoder = hevcEncoderValue(args.hevcEncoder);
+        if (encoder === 'hevc_videotoolbox') {
+            return {
+                encoder,
+                ffmpegArgs: [
+                    '-y',
+                    '-framerate', String(args.fps),
+                    '-i', path.join(framesDir, 'frame_%06d.png'),
+                    '-vf', 'format=yuv420p',
+                    '-c:v', 'hevc_videotoolbox',
+                    '-profile:v', 'main',
+                    '-b:v', '18M',
+                    '-tag:v', 'hvc1',
+                    ...(threads ? ['-threads', threads] : []),
+                    '-movflags', '+faststart',
+                    args.output
+                ]
+            };
+        }
         return {
-            encoder: 'hevc_nvenc',
+            encoder,
             ffmpegArgs: [
                 '-y',
                 '-framerate', String(args.fps),
                 '-i', path.join(framesDir, 'frame_%06d.png'),
                 '-vf', 'format=yuv420p',
-                '-c:v', 'hevc_nvenc',
+                '-c:v', encoder,
                 '-preset', 'slow',
                 '-tune', 'hq',
                 '-rc', 'constqp',

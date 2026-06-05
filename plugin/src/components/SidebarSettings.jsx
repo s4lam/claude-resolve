@@ -181,12 +181,17 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
     const [checking, setChecking] = useState(false);
     const [updating, setUpdating] = useState(false);
     const [health, setHealth] = useState(null);
+    const [renderHealth, setRenderHealth] = useState(null);
+    const [lastRenderError, setLastRenderError] = useState(null);
     const [logs, setLogs] = useState([]);
     const [rawOpen, setRawOpen] = useState(!!config.ui?.rawLogsOpen);
     const [brandKit, setBrandKit] = useState(config.brandKit || {});
     const [brandStatus, setBrandStatus] = useState('');
     const [timelineStatus, setTimelineStatus] = useState('');
     const [debugStatus, setDebugStatus] = useState('');
+    const [renderDiagStatus, setRenderDiagStatus] = useState('');
+    const [runtimeQA, setRuntimeQA] = useState(null);
+    const [runtimeQAStatus, setRuntimeQAStatus] = useState('');
 
     useEffect(() => {
         runCheck(false);
@@ -268,11 +273,28 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
         try {
             const nextHealth = await window.agentAPI.health();
             const nextLogs = await window.agentAPI.getLogs({ includeHidden: true });
+            const nextRenderHealth = await window.overlayAPI?.getRenderHealth?.();
+            const nextRenderError = await window.overlayAPI?.getLastRenderError?.();
             setHealth(nextHealth);
             setLogs(nextLogs);
+            setRenderHealth(nextRenderHealth || null);
+            setLastRenderError(nextRenderError || null);
         } catch {
             setHealth(null);
         }
+    }
+
+    async function handleRuntimeQA() {
+        setRuntimeQAStatus('Running');
+        try {
+            const result = await window.runtimeQAAPI?.run?.();
+            setRuntimeQA(result || null);
+            setRuntimeQAStatus(result?.status === 'fail' ? 'Needs work' : result?.status === 'warn' ? 'Review' : 'Passed');
+        } catch {
+            setRuntimeQA(null);
+            setRuntimeQAStatus('Failed');
+        }
+        setTimeout(() => setRuntimeQAStatus(''), 2600);
     }
 
     async function handleClearLogs() {
@@ -289,6 +311,32 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
             setDebugStatus('Failed');
         }
         setTimeout(() => setDebugStatus(''), 2600);
+    }
+
+    async function handleCopyRenderDiagnostics() {
+        setRenderDiagStatus('Copying');
+        try {
+            await navigator.clipboard.writeText(JSON.stringify({
+                renderHealth,
+                lastRenderError,
+                renderSettings
+            }, null, 2));
+            setRenderDiagStatus('Copied');
+        } catch {
+            setRenderDiagStatus('Failed');
+        }
+        setTimeout(() => setRenderDiagStatus(''), 2200);
+    }
+
+    async function handleOpenRenderFolder() {
+        setRenderDiagStatus('Opening');
+        try {
+            const result = await window.overlayAPI?.openFolder?.();
+            setRenderDiagStatus(result?.success ? 'Opened' : 'Failed');
+        } catch {
+            setRenderDiagStatus('Failed');
+        }
+        setTimeout(() => setRenderDiagStatus(''), 2200);
     }
 
     async function handleRawToggle() {
@@ -502,6 +550,14 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
                             <strong>{renderPreset.alpha}</strong>
                         </div>
                     </div>
+                    <SettingRow label="FFmpeg path" help="Leave blank to use bundled ffmpeg-static, then system paths. Set only for a custom FFmpeg build.">
+                        <input
+                            className="text-field"
+                            value={renderSettings.ffmpegPath || ''}
+                            onChange={e => updateRenderSetting({ ffmpegPath: e.target.value })}
+                            placeholder="Auto"
+                        />
+                    </SettingRow>
                     <SettingRow label="ProRes profile" help="4444 is smaller. 4444 XQ is heavier and slower.">
                         <select
                             className="select"
@@ -633,6 +689,81 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
                             status={health?.providers?.codex}
                             onLogin={id => window.agentAPI.openProviderLoginTerminal(id)}
                         />
+                    </div>
+                    <div className="render-health-card">
+                        <div className="render-health-head">
+                            <div>
+                                <strong>Render engine</strong>
+                                <span>{renderHealth?.ffmpeg?.version || 'FFmpeg version unavailable'}</span>
+                            </div>
+                            <StatusPill state={renderHealth?.ready ? 'ready' : 'needs-attention'} />
+                        </div>
+                        <div className="render-health-grid">
+                            <div><span>FFmpeg</span><strong>{renderHealth?.ffmpeg?.source || 'missing'}</strong></div>
+                            <div><span>ProRes</span><strong>{renderHealth?.encoders?.prores_ks ? 'Ready' : 'Missing'}</strong></div>
+                            <div><span>CPU MP4</span><strong>{renderHealth?.encoders?.libx264 ? 'Ready' : 'Missing'}</strong></div>
+                            <div><span>GPU MP4</span><strong>{renderHealth?.encoders?.hevc_nvenc || renderHealth?.encoders?.hevc_videotoolbox ? 'Available' : 'Fallback'}</strong></div>
+                            <div><span>Folder</span><strong>{renderHealth?.renderFolder?.writable ? 'Writable' : 'Blocked'}</strong></div>
+                            <div><span>Chromium</span><strong>{(renderHealth?.playwright?.ready ?? renderHealth?.playwright?.installed) ? 'Ready' : 'Missing'}</strong></div>
+                        </div>
+                        {renderHealth?.playwright?.chromiumPath && <code className="render-health-path">{renderHealth.playwright.chromiumPath}</code>}
+                        {renderHealth?.ffmpeg?.path && <code className="render-health-path">{renderHealth.ffmpeg.path}</code>}
+                        {renderHealth?.summary?.failures?.length > 0 && (
+                            <div className="render-health-list danger" role="status">
+                                {renderHealth.summary.failures.slice(0, 3).map((item, index) => <span key={index}>{item}</span>)}
+                            </div>
+                        )}
+                        {renderHealth?.summary?.warnings?.length > 0 && (
+                            <div className="render-health-list warning">
+                                {renderHealth.summary.warnings.slice(0, 2).map((item, index) => <span key={index}>{item}</span>)}
+                            </div>
+                        )}
+                        {lastRenderError?.message && <div className="last-failure">{lastRenderError.message}</div>}
+                        <div className="diagnostic-actions">
+                            <button className="settings-small-btn" onClick={refreshHealth}>Retry render check</button>
+                            <button className="settings-small-btn" onClick={handleCopyRenderDiagnostics}>{renderDiagStatus || 'Copy render diagnostics'}</button>
+                            <button className="settings-small-btn" onClick={handleOpenRenderFolder}>Open render folder</button>
+                        </div>
+                    </div>
+                    <div className="runtime-qa-card">
+                        <div className="render-health-head">
+                            <div>
+                                <strong>Runtime QA</strong>
+                                <span>Workspace, Ograph, Manim, render, and manual Resolve checks.</span>
+                            </div>
+                            <StatusPill state={runtimeQA?.status === 'pass' ? 'ready' : runtimeQA?.status === 'fail' ? 'needs-attention' : 'unknown'} />
+                        </div>
+                        {runtimeQA?.summary && (
+                            <div className="render-health-grid">
+                                <div><span>Passed</span><strong>{runtimeQA.summary.pass}</strong></div>
+                                <div><span>Review</span><strong>{runtimeQA.summary.warn}</strong></div>
+                                <div><span>Failed</span><strong>{runtimeQA.summary.fail}</strong></div>
+                            </div>
+                        )}
+                        {runtimeQA?.checks?.length > 0 && (
+                            <div className="runtime-qa-list">
+                                {runtimeQA.checks.slice(0, 12).map(check => (
+                                    <div className={'runtime-qa-row ' + check.status} key={check.id}>
+                                        <span>{check.status}</span>
+                                        <strong>{check.label}</strong>
+                                        <small>{check.detail}</small>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {runtimeQA?.manual?.length > 0 && (
+                            <details className="runtime-qa-manual">
+                                <summary>Manual Resolve checks</summary>
+                                <ol>
+                                    {runtimeQA.manual.map((item, index) => <li key={index}>{item}</li>)}
+                                </ol>
+                            </details>
+                        )}
+                        <div className="diagnostic-actions">
+                            <button className="settings-small-btn" onClick={handleRuntimeQA}>
+                                {runtimeQAStatus || 'Run runtime QA'}
+                            </button>
+                        </div>
                     </div>
                     {health?.logs?.lastFailure && (
                         <div className="last-failure">{health.logs.lastFailure.message}</div>

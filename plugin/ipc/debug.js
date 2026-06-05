@@ -5,6 +5,7 @@ const { clipboard } = require('electron');
 const { CONFIG_DIR, RENDER_DIR } = require('./paths');
 const { readConfig } = require('./config');
 const { readAssets } = require('./assets');
+const { getLastRenderError, getRenderHealth, summarizeRenderHealth } = require('./render-health');
 
 const DEBUG_DIR = path.join(CONFIG_DIR, 'debug-bundles');
 
@@ -17,7 +18,12 @@ function scrub(value) {
 function scrubConfig(config) {
     const clone = JSON.parse(JSON.stringify(config || {}));
     if (clone.brandKit?.logoPath) clone.brandKit.logoPath = scrub(clone.brandKit.logoPath);
+    if (clone.render?.ffmpegPath) clone.render.ffmpegPath = scrub(clone.render.ffmpegPath);
     return clone;
+}
+
+function scrubObject(value) {
+    return JSON.parse(JSON.stringify(value || null), (_key, item) => typeof item === 'string' ? scrub(item) : item);
 }
 
 function createDebugBundle(options = {}) {
@@ -35,6 +41,7 @@ function createDebugBundle(options = {}) {
         size: asset.size,
         path: scrub(asset.path)
     }));
+    const renderHealth = getRenderHealth(readConfig());
     const bundle = {
         createdAt: now,
         app: {
@@ -47,6 +54,11 @@ function createDebugBundle(options = {}) {
             node: process.version
         },
         config: scrubConfig(readConfig()),
+        renderDiagnostics: {
+            health: scrubObject(renderHealth),
+            summary: scrubObject(summarizeRenderHealth(renderHealth)),
+            lastError: scrubObject(getLastRenderError())
+        },
         assets,
         renders: renders.map(name => scrub(path.join(RENDER_DIR, name))),
         notes: 'Local diagnostic bundle. Review before sharing publicly.'

@@ -5,6 +5,7 @@ import Sidebar from './Sidebar';
 import WelcomeScreen from './WelcomeScreen';
 import PromptPresets from './PromptPresets';
 import WindowChrome from './WindowChrome';
+import WorkspaceShell from './WorkspaceShell';
 
 function tryParseStandardHTML(text) {
     const matches = [...String(text || '').matchAll(/```html\s*\n(?:(?:\/\/|<!--)\s*FILE:\s*(\S+\.html)(?:\s*-->)?\s*\n)?([\s\S]*?)```/g)];
@@ -130,9 +131,10 @@ export default function App() {
             threads: 'auto',
             createProxy: false,
             proxyEncoder: 'auto',
-            proxyQuality: 'balanced'
+            proxyQuality: 'balanced',
+            ffmpegPath: ''
         },
-        ui: { activeToolTab: 'create' },
+        ui: { activeToolTab: 'create', activeWorkspaceMode: 'create' },
         gallery: { favorites: [], recentIds: [] }
     });
     const [messages, setMessages] = useState([]);
@@ -144,6 +146,7 @@ export default function App() {
     const [tokenCount, setTokenCount] = useState(0);
     const [updateAvailable, setUpdateAvailable] = useState(false);
     const [draftPrompt, setDraftPrompt] = useState({ text: '', revision: 0 });
+    const [manimSourceDraft, setManimSourceDraft] = useState(null);
     const nextId = useRef(0);
     const nextDraftRevision = useRef(1);
     const messagesRef = useRef([]);
@@ -243,6 +246,60 @@ export default function App() {
     useEffect(() => {
         messagesRef.current = messages;
     }, [messages]);
+
+    useEffect(() => {
+        function handleOpenManimSource(event) {
+            const detail = event.detail || {};
+            const source = String(detail.source || '').trim();
+            if (!source) return;
+            setManimSourceDraft({
+                source,
+                idea: detail.idea || 'Assistant Manim source',
+                title: detail.title || 'Assistant Manim Source',
+                origin: detail.origin || 'chat',
+                graphId: detail.graphId || '',
+                revision: Date.now()
+            });
+            setSidebar({ open: true, view: 'tools' });
+            resizeForSidebar(true);
+            setConfig(prev => ({
+                ...prev,
+                ui: {
+                    ...(prev.ui || {}),
+                    activeWorkspaceMode: 'create',
+                    activeToolTab: 'manim'
+                }
+            }));
+            window.configAPI?.set?.({ ui: { activeWorkspaceMode: 'create', activeToolTab: 'manim' } })
+                .then(updated => { if (updated) setConfig(updated); })
+                .catch(() => {});
+        }
+        window.addEventListener('resolve-ai:open-manim-source', handleOpenManimSource);
+        return () => window.removeEventListener('resolve-ai:open-manim-source', handleOpenManimSource);
+    }, []);
+
+    useEffect(() => {
+        function handleOpenOgraph(event) {
+            const detail = event.detail || {};
+            const graphId = String(detail.graphId || '').trim();
+            setSidebar({ open: true, view: 'tools' });
+            resizeForSidebar(true);
+            setConfig(prev => ({
+                ...prev,
+                ui: {
+                    ...(prev.ui || {}),
+                    activeWorkspaceMode: 'create',
+                    activeToolTab: 'ograph',
+                    focusOgraphId: graphId
+                }
+            }));
+            window.configAPI?.set?.({ ui: { activeWorkspaceMode: 'create', activeToolTab: 'ograph', focusOgraphId: graphId } })
+                .then(updated => { if (updated) setConfig(updated); })
+                .catch(() => {});
+        }
+        window.addEventListener('resolve-ai:open-ograph', handleOpenOgraph);
+        return () => window.removeEventListener('resolve-ai:open-ograph', handleOpenOgraph);
+    }, []);
 
     useEffect(() => {
         activeSessionRef.current = activeSession;
@@ -618,12 +675,87 @@ export default function App() {
         }
     }
 
+    function handleWorkspaceModeChange(mode) {
+        handleConfigChange({ ui: { activeWorkspaceMode: mode } });
+        if (!sidebar.open || sidebar.view !== 'tools') {
+            showSidebarView('tools');
+        }
+    }
+
+    function handleOpenWorkspaceTool(mode, tool) {
+        handleConfigChange({ ui: { activeWorkspaceMode: mode, activeToolTab: tool } });
+        showSidebarView('tools');
+    }
+
     const showWelcome = authInfo.status !== 'ready' || welcomed;
     const sidebarOpen = sidebar.open;
+    const workspaceMode = config.ui?.activeWorkspaceMode || 'create';
     const chromeProvider = activeProvider || authInfo.provider || config.provider;
     const chromeModel = chromeProvider === 'codex' ? config.codexModel : config.model;
     const latestGeneration = useMemo(() => latestHtmlContext(messages), [messages]);
     const latestAssistantText = useMemo(() => latestAssistantTextContext(messages), [messages]);
+    const sidePanel = sidebarOpen ? (
+        <Sidebar
+            view={sidebar.view}
+            workspaceMode={workspaceMode}
+            config={config}
+            onConfigChange={handleConfigChange}
+            onPrompt={handleSend}
+            onUsePrompt={handleDraftPrompt}
+            onShowTools={() => showSidebarView('tools')}
+            onClose={closeSidebar}
+            sessions={sessions}
+            activeSession={activeSession}
+            onNewSession={handleNewSession}
+            onOpenSession={handleOpenSession}
+            onRenameSession={handleRenameSession}
+            onDeleteSession={handleDeleteSession}
+            latestGeneration={latestGeneration}
+            latestAssistantText={latestAssistantText}
+            sourceDraft={manimSourceDraft}
+        />
+    ) : null;
+    const mainPanel = showWelcome ? (
+        <WelcomeScreen
+            authInfo={authInfo}
+            config={config}
+            onAuthStateChange={setAuthInfo}
+            onStart={() => setAuthInfo(prev => ({ ...prev, status: 'ready' }))}
+            onPrompt={handleSend}
+            onDismiss={() => setWelcomed(false)}
+        />
+    ) : (
+        <Chat
+            messages={messages}
+            activeTool={activeTool}
+            tokenCount={tokenCount}
+            model={activeProvider === 'codex' ? config.codexModel : config.model}
+            provider={activeProvider || authInfo.provider || config.provider}
+            config={config}
+            onRegenerate={handleRegenerate}
+            onRepair={handleRepair}
+        />
+    );
+    const presetPanel = !showWelcome ? (
+        <PromptPresets
+            onPrompt={handleDraftPrompt}
+            disabled={isProcessing}
+            hasSelectedAssets={(config.selectedAssetIds || []).length > 0}
+        />
+    ) : null;
+    const composer = (
+        <ChatInput
+            onSend={handleSend}
+            onStop={handleStop}
+            draftPrompt={draftPrompt}
+            isProcessing={isProcessing}
+            sidebarOpen={sidebarOpen}
+            sidebarView={sidebar.view}
+            onToggleSidebar={handleSettingsToggle}
+            onToggleTools={handleToolsToggle}
+            updateAvailable={updateAvailable}
+        />
+    );
 
     return (
         <>
@@ -632,68 +764,26 @@ export default function App() {
                 provider={chromeProvider}
                 model={chromeModel}
             />
-            <div className={'body' + (sidebarOpen ? ' sidebar-open' : '')}>
-                {sidebarOpen && (
-                    <Sidebar
-                        view={sidebar.view}
-                        config={config}
-                        onConfigChange={handleConfigChange}
-                        onPrompt={handleSend}
-                        onUsePrompt={handleDraftPrompt}
-                        onShowTools={() => showSidebarView('tools')}
-                        onClose={closeSidebar}
-                        sessions={sessions}
-                        activeSession={activeSession}
-                        onNewSession={handleNewSession}
-                        onOpenSession={handleOpenSession}
-                        onRenameSession={handleRenameSession}
-                        onDeleteSession={handleDeleteSession}
-                        latestGeneration={latestGeneration}
-                        latestAssistantText={latestAssistantText}
-                    />
-                )}
-                <div className="main">
-                    {showWelcome ? (
-                        <WelcomeScreen
-                            authInfo={authInfo}
-                            config={config}
-                            onAuthStateChange={setAuthInfo}
-                            onStart={() => setAuthInfo(prev => ({ ...prev, status: 'ready' }))}
-                            onPrompt={handleSend}
-                            onDismiss={() => setWelcomed(false)}
-                        />
-                    ) : (
-                        <Chat
-                            messages={messages}
-                            activeTool={activeTool}
-                            tokenCount={tokenCount}
-                            model={activeProvider === 'codex' ? config.codexModel : config.model}
-                            provider={activeProvider || authInfo.provider || config.provider}
-                            config={config}
-                            onRegenerate={handleRegenerate}
-                            onRepair={handleRepair}
-                        />
-                    )}
-                    {!showWelcome && (
-                        <PromptPresets
-                            onPrompt={handleDraftPrompt}
-                            disabled={isProcessing}
-                            hasSelectedAssets={(config.selectedAssetIds || []).length > 0}
-                        />
-                    )}
-                    <ChatInput
-                        onSend={handleSend}
-                        onStop={handleStop}
-                        draftPrompt={draftPrompt}
-                        isProcessing={isProcessing}
-                        sidebarOpen={sidebarOpen}
-                        sidebarView={sidebar.view}
-                        onToggleSidebar={handleSettingsToggle}
-                        onToggleTools={handleToolsToggle}
-                        updateAvailable={updateAvailable}
-                    />
-                </div>
-            </div>
+            <WorkspaceShell
+                workspaceMode={workspaceMode}
+                onWorkspaceModeChange={handleWorkspaceModeChange}
+                sidebarOpen={sidebarOpen}
+                sidebarView={sidebar.view}
+                onOpenTools={handleToolsToggle}
+                onOpenSettings={handleSettingsToggle}
+                updateAvailable={updateAvailable}
+                sidePanel={sidePanel}
+                main={mainPanel}
+                presets={presetPanel}
+                composer={composer}
+                inspectorProps={{
+                    config,
+                    activeSession,
+                    messages,
+                    latestGeneration,
+                    onOpenTool: handleOpenWorkspaceTool
+                }}
+            />
         </>
     );
 }

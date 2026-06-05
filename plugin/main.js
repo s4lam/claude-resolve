@@ -22,6 +22,9 @@ const { setupDebugHandlers } = require('./ipc/debug');
 const { setupSessionHandlers } = require('./ipc/sessions');
 const { setupRoughCutHandlers } = require('./ipc/rough-cut');
 const { setupShortsStudioHandlers } = require('./ipc/shorts-studio');
+const { setupOgraphHandlers } = require('./ipc/ograph');
+const { setupManimHandlers } = require('./ipc/manim');
+const { setupRuntimeQAHandlers } = require('./ipc/runtime-qa');
 
 let mainWindow = null;
 
@@ -69,6 +72,9 @@ app.whenReady().then(async () => {
     setupSessionHandlers(ipcMain);
     setupRoughCutHandlers(ipcMain);
     setupShortsStudioHandlers(ipcMain);
+    setupOgraphHandlers(ipcMain);
+    setupManimHandlers(ipcMain);
+    setupRuntimeQAHandlers(ipcMain);
     ipcMain.handle('window:resize', (_event, { width, height }) => {
         mainWindow.setSize(width, height);
         return getWindowState();

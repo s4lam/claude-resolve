@@ -10,7 +10,11 @@ async function run() {
     require('./config.test');
     await require('./create-workflow.test');
     require('./render-validation.test');
+    require('./render-health.test');
     require('./render-settings.test');
+    require('./ograph.test');
+    require('./manim.test');
+    require('./runtime-qa.test');
     require('./paths.test');
     require('./repair.test');
     require('./rough-cut.test');

@@ -11,16 +11,20 @@ const { extensionForRenderSettings, normalizeRenderSettings, proxyPathFor } = re
 const { resolveAssetReferences } = require('./assets');
 const { createRenderQueue } = require('./render-queue');
 const {
-    findExecutable, ENV, NODE_PATH, PLAYWRIGHT_BROWSERS_PATH,
-    RENDER_DIR, THUMBNAIL_DIR, CONFIG_DIR,
-    FFMPEG_CANDIDATES, FFMPEG_VERIFY_CMD
+    ENV, NODE_PATH, PLAYWRIGHT_BROWSERS_PATH,
+    RENDER_DIR, THUMBNAIL_DIR, CONFIG_DIR
 } = require('./paths');
+const {
+    applyRenderHealthFallback,
+    friendlyRenderError,
+    getLastRenderError,
+    getRenderHealth,
+    setLastRenderError,
+    summarizeRenderHealth
+} = require('./render-health');
 
-// Resolve executable paths at load time — Resolve's Electron has a stripped PATH
-const FFMPEG_PATH = findExecutable(FFMPEG_CANDIDATES, FFMPEG_VERIFY_CMD);
 const RENDER_START_TIMEOUT_MS = 45000;
 
-console.log('RESOLVED: ffmpeg=' + FFMPEG_PATH);
 console.log('RESOLVED: node=' + NODE_PATH);
 
 function renderFilename(name, extension = '.mov') {
@@ -177,7 +181,39 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
     fps = fps || cfg.fps;
     width = width || cfg.width;
     height = height || cfg.height;
-    const normalizedRender = normalizeRenderSettings({ ...(cfg.render || {}), ...(renderSettings || {}) });
+    let normalizedRender = normalizeRenderSettings({ ...(cfg.render || {}), ...(renderSettings || {}) });
+    const renderHealth = getRenderHealth({ ...cfg, render: { ...(cfg.render || {}), ...(renderSettings || {}) } });
+    if (!renderHealth.ffmpeg.path) {
+        const error = friendlyRenderError(renderHealth.ffmpeg.error || 'FFmpeg failed to spawn');
+        setLastRenderError({ message: error, raw: renderHealth.ffmpeg.error, renderSettings: normalizedRender, outputPath: null, ffmpegPath: null });
+        return { success: false, error, health: renderHealth };
+    }
+    if (!renderHealth.renderFolder?.writable) {
+        const error = friendlyRenderError(renderHealth.renderFolder?.error || 'Permission denied writing render output');
+        setLastRenderError({ message: error, raw: renderHealth.renderFolder?.error, renderSettings: normalizedRender, outputPath: null, ffmpegPath: renderHealth.ffmpeg.path });
+        return { success: false, error, health: renderHealth };
+    }
+    if (!(renderHealth.playwright?.ready ?? renderHealth.playwright?.installed)) {
+        const raw = renderHealth.playwright?.error || 'Playwright Chromium browser executable is missing';
+        const error = friendlyRenderError(raw);
+        setLastRenderError({ message: error, raw, renderSettings: normalizedRender, outputPath: null, ffmpegPath: renderHealth.ffmpeg.path });
+        return { success: false, error, health: renderHealth };
+    }
+    const effectiveRender = applyRenderHealthFallback(normalizedRender, renderHealth);
+    normalizedRender = effectiveRender.settings;
+    for (const warning of effectiveRender.warnings) {
+        if (mainWindow) mainWindow.webContents.send('overlay:renderProgress', { type: 'warning', message: warning });
+    }
+    const neededEncoder = normalizedRender.outputFormat === 'prores'
+        ? 'prores_ks'
+        : normalizedRender.outputFormat === 'h264'
+            ? 'libx264'
+            : effectiveRender.hevcEncoder;
+    if (neededEncoder && !renderHealth.encoders?.[neededEncoder]) {
+        const error = friendlyRenderError(`Unknown encoder ${neededEncoder}`);
+        setLastRenderError({ message: error, raw: `Missing encoder ${neededEncoder}`, renderSettings: normalizedRender, outputPath: null, ffmpegPath: renderHealth.ffmpeg.path });
+        return { success: false, error, health: renderHealth };
+    }
     html = resolveAssetReferences(html, metadata?.selectedAssetIds || cfg.selectedAssetIds || []);
     const tempDir = path.join(os.tmpdir(), 'claude_resolve_' + Date.now());
     fs.mkdirSync(tempDir, { recursive: true });
@@ -207,10 +243,11 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
             '--width', String(width),
             '--height', String(height),
             '--output', outputPath,
-            '--ffmpeg', FFMPEG_PATH,
+            '--ffmpeg', renderHealth.ffmpeg.path,
             '--output-format', normalizedRender.outputFormat,
             '--prores-profile', normalizedRender.proresProfile,
             '--ffmpeg-threads', normalizedRender.threads,
+            ...(effectiveRender.hevcEncoder ? ['--hevc-encoder', effectiveRender.hevcEncoder] : []),
             ...(proxyPath ? [
                 '--proxy-output', proxyPath,
                 '--proxy-encoder', normalizedRender.proxyEncoder,
@@ -268,12 +305,15 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
             if (code !== 0) {
                 const rendererError = [...renderMessages].reverse().find((msg) => msg.type === 'error' && msg.message)?.message;
                 const stderrError = stderrBuf.trim().split('\n').filter(Boolean).pop();
-                const errMsg = rendererError || stderrError || 'Render process exited with code ' + code;
+                const errMsg = friendlyRenderError(rendererError || stderrError || 'Render process exited with code ' + code);
+                setLastRenderError({ message: errMsg, raw: stderrBuf, renderSettings: normalizedRender, outputPath, ffmpegPath: renderHealth.ffmpeg.path, code });
                 resolve({ success: false, error: errMsg });
                 return;
             }
             if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size <= 0) {
-                resolve({ success: false, error: 'Render finished but no output file was created: ' + outputPath });
+                const errMsg = friendlyRenderError('Render finished but no output file was created: ' + outputPath);
+                setLastRenderError({ message: errMsg, raw: errMsg, renderSettings: normalizedRender, outputPath, ffmpegPath: renderHealth.ffmpeg.path, code });
+                resolve({ success: false, error: errMsg });
                 return;
             }
             const renderMetadata = writeRenderMetadata(outputName, {
@@ -290,8 +330,10 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
             });
             try {
                 await importToTimeline(outputPath);
+                setLastRenderError(null);
                 resolve({ success: true, path: outputPath, name: outputName, metadata: renderMetadata });
             } catch (err) {
+                setLastRenderError(null);
                 resolve({ success: true, path: outputPath, name: outputName, metadata: renderMetadata, warning: 'Rendered but import failed: ' + err.message });
             }
         });
@@ -302,7 +344,9 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
             console.log('RENDER SPAWN ERROR:', err.message);
             if (queueId) activeRenderProcesses.delete(queueId);
             cleanupTempDir();
-            resolve({ success: false, error: 'Failed to spawn: ' + err.message });
+            const errMsg = friendlyRenderError('Failed to spawn: ' + err.message);
+            setLastRenderError({ message: errMsg, raw: err.message, renderSettings: normalizedRender, outputPath, ffmpegPath: renderHealth.ffmpeg.path });
+            resolve({ success: false, error: errMsg });
         });
     });
 }
@@ -409,6 +453,19 @@ function handleRevealRender(_event, name) {
     return true;
 }
 
+async function handleAddRenderToTimeline(_event, name) {
+    const safeName = path.basename(String(name || ''));
+    if (!isRenderableOutput(safeName)) return { success: false, error: 'Unsupported render file.' };
+    const renderPath = path.join(RENDER_DIR, safeName);
+    if (!fs.existsSync(renderPath)) return { success: false, error: 'Render not found.' };
+    try {
+        await importToTimeline(renderPath);
+        return { success: true, name: safeName };
+    } catch (err) {
+        return { success: false, error: err.message || 'Could not add render to the active timeline.' };
+    }
+}
+
 function handleDeleteAllRenders() {
     if (!fs.existsSync(RENDER_DIR)) return false;
     fs.rmSync(RENDER_DIR, { recursive: true, force: true });
@@ -418,6 +475,24 @@ function handleDeleteAllRenders() {
 
 function handleValidateOverlay(_event, input) {
     return validateOverlayHtml(input);
+}
+
+function handleGetRenderHealth() {
+    return getRenderHealth(readConfig());
+}
+
+function handleRepairRenderDeps() {
+    const health = getRenderHealth(readConfig());
+    const summary = summarizeRenderHealth(health);
+    return {
+        success: summary.ok,
+        health,
+        failures: summary.failures,
+        warnings: summary.warnings,
+        message: summary.ok
+            ? 'Render dependencies are ready.'
+            : `Render dependencies still need attention. ${summary.fix}`
+    };
 }
 
 function handleRenderQueue(_event, payload = {}) {
@@ -440,17 +515,28 @@ function handleRenderQueue(_event, payload = {}) {
     return { success: true, action, result, jobs: persistQueue() };
 }
 
+async function handleOpenRenderFolder() {
+    fs.mkdirSync(RENDER_DIR, { recursive: true });
+    const error = await shell.openPath(RENDER_DIR);
+    return { success: !error, error: error || null, path: RENDER_DIR };
+}
+
 function setupOverlayHandlers(ipcMain, win) {
     mainWindow = win;
     ipcMain.handle('overlay:renderMov', handleRenderMov);
     ipcMain.handle('overlay:validate', handleValidateOverlay);
+    ipcMain.handle('overlay:getRenderHealth', handleGetRenderHealth);
+    ipcMain.handle('overlay:repairRenderDeps', handleRepairRenderDeps);
+    ipcMain.handle('overlay:getLastRenderError', () => getLastRenderError());
     ipcMain.handle('renders:list', handleListRenders);
     ipcMain.handle('renders:delete', handleDeleteRender);
     ipcMain.handle('renders:rename', handleRenameRender);
     ipcMain.handle('renders:reveal', handleRevealRender);
+    ipcMain.handle('renders:addToTimeline', handleAddRenderToTimeline);
     ipcMain.handle('renders:deleteAll', handleDeleteAllRenders);
     ipcMain.handle('renders:syncToMediaPool', handleSyncToMediaPool);
     ipcMain.handle('renders:queue', handleRenderQueue);
+    ipcMain.handle('renders:openFolder', handleOpenRenderFolder);
 }
 
 module.exports = { setupOverlayHandlers };

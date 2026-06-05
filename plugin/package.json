@@ -1,6 +1,6 @@
 {
     "name": "resolve-ai",
-    "version": "0.5.0-beta",
+  "version": "0.6.0-beta",
     "description": "AI-powered motion graphics generator and assistant for DaVinci Resolve",
     "main": "main.js",
     "scripts": {
@@ -8,7 +8,10 @@
     "test": "node tests/run-tests.js",
     "build": "vite build",
     "smoke": "node ../scripts/smoke-plugin-ui.js",
+    "smoke:visual": "node ../scripts/visual-smoke-workspace.js",
+    "media:readme": "node ../scripts/capture-readme-media.js",
     "validate:release": "node ../scripts/validate-release-package.js",
+    "render-deps:check": "node scripts/check-render-deps.js",
     "package:release": "node ../scripts/package-release.js"
   },
     "devDependencies": {

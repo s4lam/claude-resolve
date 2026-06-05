@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { execFileSync, execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
 const pluginPkg = JSON.parse(fs.readFileSync(path.join(root, 'plugin', 'package.json'), 'utf8'));
@@ -54,12 +54,23 @@ function copyRecursive(source, target, options = {}) {
     fs.copyFileSync(source, target);
 }
 
+function runPluginBuild() {
+    const viteBin = path.join(root, 'plugin', 'node_modules', 'vite', 'bin', 'vite.js');
+    if (!fs.existsSync(viteBin)) {
+        throw new Error('Missing plugin/node_modules/vite. Run npm --prefix plugin install before packaging a release.');
+    }
+    execFileSync(process.execPath, [viteBin, 'build'], {
+        cwd: path.join(root, 'plugin'),
+        stdio: 'inherit'
+    });
+}
+
 fs.rmSync(stageDir, { recursive: true, force: true });
 fs.mkdirSync(stageDir, { recursive: true });
 ensureBuiltinTemplatePack();
-execSync('npm --prefix plugin run build', { cwd: root, stdio: 'inherit' });
+runPluginBuild();
 
-for (const item of ['plugin', 'community-templates', 'screenshots']) {
+for (const item of ['plugin', 'community-templates', 'screenshots', 'docs']) {
     const source = path.join(root, item);
     if (fs.existsSync(source)) copyRecursive(source, path.join(stageDir, item));
 }

@@ -52,11 +52,13 @@ const DEFAULTS = {
         threads: 'auto',
         createProxy: false,
         proxyEncoder: 'auto',
-        proxyQuality: 'balanced'
+        proxyQuality: 'balanced',
+        ffmpegPath: ''
     },
     ui: {
         rawLogsOpen: false,
-        activeToolTab: 'create'
+        activeToolTab: 'create',
+        activeWorkspaceMode: 'create'
     },
     gallery: {
         favorites: [],

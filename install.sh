@@ -329,12 +329,15 @@ fi
 ok 'Chromium installed.'
 
 # 6 - ffmpeg
-step 6 'Checking ffmpeg'
-if command -v ffmpeg >/dev/null 2>&1; then
-    ok 'ffmpeg found.'
-else
-    warn 'ffmpeg not found on PATH. Rendering needs ffmpeg (brew install ffmpeg).'
+step 6 'Checking render dependencies'
+render_deps_check="$PLUGIN_SRC/scripts/check-render-deps.js"
+if [ ! -f "$render_deps_check" ]; then
+    fail 'Render dependency self-test is missing from plugin/scripts.'
 fi
+if ! ( cd "$PLUGIN_SRC" && node "$render_deps_check" ); then
+    fail 'Render dependency self-test failed. Re-run this installer with internet access, or install FFmpeg manually with brew install ffmpeg.'
+fi
+ok 'Render dependencies ready.'
 
 # 7 - Copy plugin into DaVinci Resolve (needs root)
 step 7 'Installing plugin into DaVinci Resolve'
@@ -367,7 +370,7 @@ ok "Installed to $DEST"
 
 # 8 - Verify
 step 8 'Verifying installation'
-for rel in manifest.xml main.js data/builtin-template-packs.json ipc/assets.js ipc/agent.js ipc/agent-logs.js ipc/captions.js ipc/codex.js ipc/codex-parser.js ipc/codex-stderr-filter.js ipc/render-validation.js ipc/repair.js ipc/showcase.js ipc/template-packs.js ipc/templates.js ipc/updates.js dist/index.html renderer/render.js renderer/node_modules/playwright updater/install-update.ps1 updater/install-update.sh; do
+for rel in manifest.xml main.js data/builtin-template-packs.json ipc/assets.js ipc/agent.js ipc/agent-logs.js ipc/captions.js ipc/codex.js ipc/codex-parser.js ipc/codex-stderr-filter.js ipc/render-health.js ipc/render-validation.js ipc/repair.js ipc/runtime-qa.js ipc/showcase.js ipc/template-packs.js ipc/templates.js ipc/updates.js dist/index.html renderer/render.js renderer/node_modules/ffmpeg-static renderer/node_modules/playwright scripts/check-render-deps.js updater/install-update.ps1 updater/install-update.sh; do
     if [ ! -e "$DEST/$rel" ]; then
         fail "Verification failed - missing: $rel"
     fi

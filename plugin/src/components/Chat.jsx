@@ -5,6 +5,55 @@ import { Download } from './Icons';
 
 const REGENERATE_ACTIONS = ['More cinematic', 'Simpler', 'Transparent BG', 'Longer', 'Same style', '3 variations'];
 
+function splitFencedCode(text = '') {
+    const source = String(text || '');
+    const parts = [];
+    const fence = /```([a-zA-Z0-9_-]+)?[ \t]*\r?\n?([\s\S]*?)```/g;
+    let cursor = 0;
+    let match;
+    while ((match = fence.exec(source))) {
+        if (match.index > cursor) {
+            parts.push({ type: 'text', content: source.slice(cursor, match.index) });
+        }
+        parts.push({
+            type: 'code',
+            language: (match[1] || '').toLowerCase(),
+            content: String(match[2] || '').trim()
+        });
+        cursor = match.index + match[0].length;
+    }
+    if (cursor < source.length) {
+        parts.push({ type: 'text', content: source.slice(cursor) });
+    }
+    return parts.length ? parts : [{ type: 'text', content: source }];
+}
+
+function isManimSource(code = '', language = '') {
+    const text = String(code || '');
+    const lang = String(language || '').toLowerCase();
+    const pythonish = !lang || ['py', 'python'].includes(lang);
+    return pythonish
+        && /class\s+ResolveAIManimScene\s*\(/.test(text)
+        && /(from\s+manim\s+import|import\s+manim|Scene\s*\))/.test(text);
+}
+
+function openManimSource(code) {
+    window.dispatchEvent(new CustomEvent('resolve-ai:open-manim-source', {
+        detail: {
+            source: String(code || '').trim(),
+            title: 'Assistant Manim Source',
+            idea: 'Use assistant-generated Manim source',
+            origin: 'chat'
+        }
+    }));
+}
+
+function openOgraphGraph(graphId) {
+    window.dispatchEvent(new CustomEvent('resolve-ai:open-ograph', {
+        detail: { graphId: graphId || '' }
+    }));
+}
+
 function renderFormat(config = {}) {
     const settings = config.render || {};
     if (settings.renderPreset === 'mp4_gpu_quality') {
@@ -27,6 +76,7 @@ function RenderMovAction({ parsed, message, config, provider, model, validation,
     const [status, setStatus] = useState(null);
     const [progress, setProgress] = useState(0);
     const [errorMsg, setErrorMsg] = useState('');
+    const [ographStatus, setOgraphStatus] = useState('');
     const format = renderFormat(config);
 
     useEffect(() => {
@@ -68,6 +118,10 @@ function RenderMovAction({ parsed, message, config, provider, model, validation,
                     prompt: message.prompt,
                     provider,
                     model,
+                    html: parsed.html,
+                    width: config.width,
+                    height: config.height,
+                    fps: config.fps,
                     renderQueueId: queueJob?.id || null,
                     selectedAssetIds: config.selectedAssetIds || [],
                     renderSettings: config.render || {},
@@ -80,6 +134,27 @@ function RenderMovAction({ parsed, message, config, provider, model, validation,
                 } catch { /* render queue is best-effort */ }
                 setStatus(result.warning ? 'rendered' : 'done');
                 onRendered?.(result);
+                try {
+                    if (window.ographAPI?.createFromGeneration) {
+                        const graph = await window.ographAPI.createFromGeneration({
+                            prompt: message.prompt,
+                            generation: parsed,
+                            config,
+                            provider,
+                            model,
+                            assets: (config.selectedAssetIds || []).map(id => ({ id })),
+                            validationWarnings: validation?.warnings || [],
+                            rendered: true,
+                            render: result.metadata || { name: result.name, path: result.path },
+                            timelineName: result.warning ? '' : 'Current timeline',
+                            messageId: message.id
+                        });
+                        setOgraphStatus(graph?.id ? 'Ograph saved' : '');
+                        window.dispatchEvent(new CustomEvent('resolve-ai:ographs-changed'));
+                    }
+                } catch {
+                    setOgraphStatus('Ograph save skipped');
+                }
                 window.dispatchEvent(new CustomEvent('resolve-ai:renders-changed'));
                 window.dispatchEvent(new CustomEvent('resolve-ai:render-queue-changed'));
             } else {
@@ -112,10 +187,20 @@ function RenderMovAction({ parsed, message, config, provider, model, validation,
         );
     }
     if (status === 'done') {
-        return <button className="btn-render" disabled>Added to Timeline &#10003;</button>;
+        return (
+            <div className="render-action-stack">
+                <button className="btn-render" disabled>Added to Timeline &#10003;</button>
+                {ographStatus && <span>{ographStatus}</span>}
+            </div>
+        );
     }
     if (status === 'rendered') {
-        return <button className="btn-render" disabled>Rendered &#10003;</button>;
+        return (
+            <div className="render-action-stack">
+                <button className="btn-render" disabled>Rendered &#10003;</button>
+                {ographStatus && <span>{ographStatus}</span>}
+            </div>
+        );
     }
     return (
         <div className="render-error-actions">
@@ -140,6 +225,7 @@ function RenderCard({ message, parsed, config, provider, model, onRegenerate, on
     const realtime = parsed.mode === 'realtime';
     const [validation, setValidation] = useState(null);
     const [saveStatus, setSaveStatus] = useState('');
+    const [ographStatus, setOgraphStatus] = useState('');
     const [renderResult, setRenderResult] = useState(null);
     const format = renderFormat(config);
 
@@ -169,6 +255,32 @@ function RenderCard({ message, parsed, config, provider, model, onRegenerate, on
         setSaveStatus('Saved');
         window.dispatchEvent(new CustomEvent('resolve-ai:templates-changed'));
         setTimeout(() => setSaveStatus(''), 1800);
+    }
+
+    async function handleSaveOgraph() {
+        if (!window.ographAPI?.createFromGeneration) return;
+        setOgraphStatus('Saving');
+        try {
+            const graph = await window.ographAPI.createFromGeneration({
+                prompt: message.prompt,
+                generation: parsed,
+                config,
+                provider,
+                model,
+                assets: (config.selectedAssetIds || []).map(id => ({ id })),
+                validationWarnings: validation?.warnings || [],
+                rendered: Boolean(renderResult?.success),
+                render: renderResult?.metadata || renderResult || {},
+                timelineName: renderResult?.warning ? '' : renderResult?.success ? 'Current timeline' : '',
+                messageId: message.id
+            });
+            setOgraphStatus('Saved to Ograph');
+            window.dispatchEvent(new CustomEvent('resolve-ai:ographs-changed'));
+            openOgraphGraph(graph?.id);
+            setTimeout(() => setOgraphStatus(''), 1800);
+        } catch {
+            setOgraphStatus('Ograph save failed');
+        }
     }
 
     const compatibility = validation?.compatibility;
@@ -237,6 +349,9 @@ function RenderCard({ message, parsed, config, provider, model, onRegenerate, on
                 <button className="mini-action" onClick={handleSaveTemplate}>
                     {saveStatus || 'Save as Template'}
                 </button>
+                <button className="mini-action primary" onClick={handleSaveOgraph}>
+                    {ographStatus || 'Save to Ograph'}
+                </button>
                 {REGENERATE_ACTIONS.map(action => (
                     <button
                         key={action}
@@ -272,6 +387,41 @@ function VariationSetCard({ message, parsed, config, provider, model, onRegenera
                     />
                 ))}
             </div>
+        </div>
+    );
+}
+
+function AssistantText({ text }) {
+    const parts = splitFencedCode(text);
+    return (
+        <div className="assistant-rich bubble">
+            {parts.map((part, index) => {
+                if (part.type === 'code') {
+                    const manim = isManimSource(part.content, part.language);
+                    return (
+                        <div className="assistant-code-card" key={`${part.type}-${index}`}>
+                            <div className="assistant-code-head">
+                                <span>{part.language || 'code'}</span>
+                                {manim && (
+                                    <button
+                                        type="button"
+                                        className="mini-action primary"
+                                        onClick={() => openManimSource(part.content)}
+                                    >
+                                        Use in Manim Lab
+                                    </button>
+                                )}
+                            </div>
+                            <pre className="assistant-code-block">{part.content}</pre>
+                        </div>
+                    );
+                }
+                return part.content.trim() ? (
+                    <div className="assistant-text-block" key={`${part.type}-${index}`}>
+                        {part.content.trim()}
+                    </div>
+                ) : null;
+            })}
         </div>
     );
 }
@@ -315,7 +465,7 @@ function MessageBubble({ message, activeTool, tokenCount, model, provider, confi
                                 onRegenerate={onRegenerate}
                                 onRepair={onRepair}
                             />
-                        : <div className="bubble">{message.text}</div>}
+                        : <AssistantText text={message.text} />}
                 {parsed && (
                     <details className="code-toggle">
                         <summary>Show code</summary>
@@ -333,6 +483,7 @@ export default function Chat({ messages, activeTool, tokenCount, model, provider
     useEffect(() => {
         if (outputRef.current) {
             requestAnimationFrame(() => {
+                if (!outputRef.current) return;
                 outputRef.current.scrollTop = outputRef.current.scrollHeight;
             });
         }

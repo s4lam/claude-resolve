@@ -17,6 +17,7 @@ function templatePrompt(template) {
 
 export default function SidebarTemplates({ onPrompt }) {
     const [templates, setTemplates] = useState([]);
+    const [status, setStatus] = useState('');
 
     async function refreshTemplates() {
         if (!window.templateAPI) return;
@@ -39,9 +40,38 @@ export default function SidebarTemplates({ onPrompt }) {
         onPrompt(templatePrompt(template), { displayText: `Use template: ${template.name}` });
     }
 
+    async function handleCreateOgraph(template) {
+        if (!window.ographAPI?.createFromGeneration) return;
+        setStatus('Saving Ograph');
+        try {
+            await window.ographAPI.createFromGeneration({
+                source: 'template',
+                templateId: template.id,
+                prompt: template.prompt || template.name,
+                generation: {
+                    name: template.name,
+                    html: template.html || ''
+                },
+                provider: template.provider || '',
+                model: template.model || '',
+                width: template.width || 1920,
+                height: template.height || 1080,
+                fps: template.fps || 25
+            });
+            setStatus('Ograph saved');
+            window.dispatchEvent(new CustomEvent('resolve-ai:ographs-changed'));
+        } catch {
+            setStatus('Ograph failed');
+        }
+        setTimeout(() => setStatus(''), 3000);
+    }
+
     return (
         <div className="sb-section template-section">
-            <div className="sb-title"><span>Templates</span></div>
+            <div className="sb-title">
+                <span>Templates</span>
+                {status && <span className="sync-status">{status}</span>}
+            </div>
             {templates.length === 0 ? (
                 <div className="sb-empty">No saved templates</div>
             ) : (
@@ -58,6 +88,7 @@ export default function SidebarTemplates({ onPrompt }) {
                                 </div>
                             </div>
                             <button className="mini-action" onClick={() => handleUse(template)}>Use</button>
+                            <button className="mini-action" onClick={() => handleCreateOgraph(template)}>Ograph</button>
                             <button className="render-del always" title="Delete template" onClick={() => handleDelete(template.id)}>
                                 &#10005;
                             </button>
