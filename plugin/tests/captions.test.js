@@ -2,6 +2,7 @@ const assert = require('assert');
 const {
   analyzeCaptionCues,
   buildCaptionPrompt,
+  captionFitRules,
   estimateWordTimings,
   parseCaptionText,
   splitCuePhrases
@@ -44,6 +45,24 @@ assert(prompt.includes('Transcript stats'));
 
 const kineticPrompt = buildCaptionPrompt({ cues, style: 'kinetic', width: 1920, height: 1080, fps: 25 });
 assert(kineticPrompt.includes('<caption_phrases>'));
+
+const verticalPrompt = buildCaptionPrompt({ cues, style: 'social shorts', width: 1080, height: 1920, fps: 30 });
+assert(verticalPrompt.includes('Orientation: vertical 9:16 safe'));
+assert(verticalPrompt.includes('x 7%-93%, y 12%-86%'));
+assert(verticalPrompt.includes('max 2 lines'));
+assert(verticalPrompt.includes('max-width around 86%'));
+assert(verticalPrompt.includes('no horizontal scrolling, clipped words, or text outside the stage'));
+
+const boldHookPrompt = buildCaptionPrompt({ cues, style: 'bold hook', width: 1080, height: 1920, fps: 30 });
+assert(boldHookPrompt.includes('Bold hook captions'));
+assert(boldHookPrompt.includes('<caption_phrases>'));
+
+const documentaryPrompt = buildCaptionPrompt({ cues, style: 'documentary', width: 1080, height: 1920, fps: 30 });
+assert(documentaryPrompt.includes('Minimal documentary captions'));
+
+const verticalFit = captionFitRules({ width: 1080, height: 1920, style: 'bold hook' });
+assert.strictEqual(verticalFit.vertical, true);
+assert.strictEqual(verticalFit.maxLines, 2);
 
 const timings = estimateWordTimings(cues[0]);
 assert.strictEqual(timings.length, 4);

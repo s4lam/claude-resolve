@@ -5,7 +5,9 @@ const CAPTION_STYLES = [
     ['kinetic', 'Kinetic', 'Phrase motion with strong emphasis.'],
     ['karaoke', 'Karaoke', 'Timed word or phrase highlighting.'],
     ['social shorts', 'Social', 'Large captions for short-form clips.'],
-    ['podcast clips', 'Podcast', 'Lower captions with space for faces.']
+    ['podcast clips', 'Podcast', 'Lower captions with space for faces.'],
+    ['bold hook', 'Bold Hook', 'Large first-line hook for vertical shorts.'],
+    ['documentary', 'Documentary', 'Minimal readable captions for story edits.']
 ];
 
 function summarizeCues(cues) {

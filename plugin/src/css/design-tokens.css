@@ -43,6 +43,7 @@
     --bg-chip-lo:      #232327;   /* chip hover gradient bottom */
     --bg-scroll-hover: #3a3a3e;
     --bg-error:        #3c1f1c;
+    --bg-warn:         #3a2e16;
     --line:            #2A2A2E;
     --line-soft:       #222226;
 
@@ -56,6 +57,7 @@
 
     --white: #FFFFFF;
     --color-error: #ff8a7a;
+    --color-warn:  #ffc46b;
 
     /* ───────────── Translucent fills ───────────── */
     --sel-bg:        rgba(232, 132, 58, .35);

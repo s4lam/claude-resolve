@@ -19,6 +19,16 @@ const TARGETS = [
 
 const HANDLES = [0.25, 0.5, 1, 2];
 
+const SHORT_CAPTION_STYLES = [
+    ['social shorts', 'Social'],
+    ['bold hook', 'Bold Hook'],
+    ['kinetic', 'Kinetic'],
+    ['karaoke', 'Karaoke'],
+    ['clean', 'Clean'],
+    ['podcast clips', 'Podcast'],
+    ['documentary', 'Documentary']
+];
+
 function formatSeconds(value) {
     const number = Number(value);
     if (!Number.isFinite(number)) return 'n/a';
@@ -68,6 +78,28 @@ function selectedIndexesFromMap(map) {
         .map(([index]) => Number(index));
 }
 
+function cuesForCandidate(cues = [], candidate = {}, transcriptOffsetSeconds = 0) {
+    const start = Number(candidate.start);
+    const end = Number(candidate.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
+    return cues
+        .map(cue => {
+            const cueStart = Number(cue.start) - Number(transcriptOffsetSeconds || 0);
+            const cueEnd = Number(cue.end) - Number(transcriptOffsetSeconds || 0);
+            if (!Number.isFinite(cueStart) || !Number.isFinite(cueEnd)) return null;
+            if (cueEnd <= start || cueStart >= end) return null;
+            const localStart = Math.max(0, cueStart - start);
+            const localEnd = Math.min(end - start, cueEnd - start);
+            if (localEnd <= localStart) return null;
+            return {
+                ...cue,
+                start: Number(localStart.toFixed(3)),
+                end: Number(localEnd.toFixed(3))
+            };
+        })
+        .filter(Boolean);
+}
+
 function candidatePostText(candidate = {}) {
     const publish = candidate.publish || {};
     return [
@@ -108,6 +140,7 @@ export default function SidebarShortsStudio({ latestAssistantText, onPrompt }) {
     const [targetMode, setTargetMode] = useState('60');
     const [customTarget, setCustomTarget] = useState('');
     const [handleSeconds, setHandleSeconds] = useState(0.5);
+    const [captionStyle, setCaptionStyle] = useState('social shorts');
     const [allowReviewCandidates, setAllowReviewCandidates] = useState(false);
     const [jsonDraft, setJsonDraft] = useState('');
     const [candidateData, setCandidateData] = useState(null);
@@ -455,15 +488,37 @@ export default function SidebarShortsStudio({ latestAssistantText, onPrompt }) {
         }
     }
 
-    function captionCandidate(candidate) {
-        const prompt = [
-            candidate.publish?.captionPrompt || `Create short-form captions for ${candidate.title}.`,
-            '',
-            `Clip range: ${candidate.startLabel} - ${candidate.endLabel}.`,
-            'Use transparent ProRes 4444 overlay, vertical-safe typography, kinetic emphasis, and a strong first 2 seconds.'
-        ].join('\n');
+    async function captionCandidate(candidate) {
+        const candidateCues = cuesForCandidate(transcript?.cues || [], candidate, transcriptOffsetSeconds);
+        let prompt = '';
+        if (candidateCues.length && window.captionAPI?.generate) {
+            const result = await window.captionAPI.generate({
+                cues: candidateCues,
+                style: captionStyle,
+                width: 1080,
+                height: 1920,
+                fps: clip?.fps || 30
+            });
+            prompt = [
+                `Create vertical subtitles for this selected Short: ${candidate.title}.`,
+                `Clip range: ${candidate.startLabel} - ${candidate.endLabel}.`,
+                candidate.publish?.captionHook ? `Hook text: ${candidate.publish.captionHook}` : '',
+                '',
+                result?.prompt || ''
+            ].filter(Boolean).join('\n');
+        } else {
+            prompt = [
+                candidate.publish?.captionPrompt || `Create short-form captions for ${candidate.title}.`,
+                '',
+                `Clip range: ${candidate.startLabel} - ${candidate.endLabel}.`,
+                `Style: ${captionStyle}. Canvas: 1080x1920 vertical 9:16.`,
+                'Use transparent ProRes 4444 overlay.',
+                'Keep every caption inside x 7%-93% and y 12%-86%. Max 2 lines, about 18-24 characters per line, max-width 86%, responsive font size, and no clipped or edge-touching words.',
+                'Use vertical-safe typography, kinetic emphasis where useful, and a strong first 2 seconds.'
+            ].join('\n');
+        }
         const accepted = onPrompt(prompt, { displayText: `Caption Short: ${candidate.title}` });
-        setTransientStatus(accepted === false ? 'Finish current run first' : 'Caption prompt sent');
+        setTransientStatus(accepted === false ? 'Finish current run first' : candidateCues.length ? `Caption prompt sent (${candidateCues.length} cues)` : 'Caption prompt sent');
     }
 
     return (
@@ -564,6 +619,12 @@ export default function SidebarShortsStudio({ latestAssistantText, onPrompt }) {
                         <span>Handles</span>
                         <select value={handleSeconds} onChange={event => setHandleSeconds(Number(event.target.value))}>
                             {HANDLES.map(value => <option value={value} key={value}>{value}s</option>)}
+                        </select>
+                    </label>
+                    <label className="create-field">
+                        <span>Subtitle style</span>
+                        <select value={captionStyle} onChange={event => setCaptionStyle(event.target.value)}>
+                            {SHORT_CAPTION_STYLES.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
                         </select>
                     </label>
                 </div>

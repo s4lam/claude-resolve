@@ -35,6 +35,20 @@ const CAPTION_STYLE_PRESETS = {
         motion: 'quiet emphasis and speaker-friendly pacing',
         typography: 'clean subtitle blocks with occasional emphasized terms',
         emphasis: 'do not cover faces or microphones'
+    },
+    'bold hook': {
+        label: 'Bold hook captions',
+        placement: 'upper-middle hook then lower safe captions',
+        motion: 'fast first-line snap, then stable phrase changes',
+        typography: 'extra bold first phrase, compact two-line blocks',
+        emphasis: 'make the first two seconds scroll-stopping without overflowing'
+    },
+    documentary: {
+        label: 'Minimal documentary captions',
+        placement: 'lower safe area with quiet margins',
+        motion: 'subtle fades with no distracting bounce',
+        typography: 'clean documentary subtitle style with measured line length',
+        emphasis: 'clarity and restraint over hype'
     }
 };
 
@@ -133,12 +147,44 @@ function analyzeCaptionCues(cues = []) {
     };
 }
 
+function captionFitRules({ width = 1920, height = 1080, style = 'clean' } = {}) {
+    const vertical = Number(height) > Number(width);
+    const maxLineChars = vertical
+        ? ['social shorts', 'bold hook', 'kinetic', 'karaoke'].includes(style) ? 18 : 24
+        : 34;
+    const maxLines = vertical ? 2 : 3;
+    const safeRect = vertical
+        ? 'x 7%-93%, y 12%-86%; reserve top UI area, bottom app controls, and side crop margins'
+        : 'x 6%-94%, y 8%-90%; reserve normal title/action safe margins';
+    const fontRule = vertical
+        ? 'Use responsive font sizing based on container height, e.g. clamp(34px, 5.8vh, 76px), and reduce per cue if text still exceeds the safe width.'
+        : 'Use responsive font sizing and reduce per cue if text exceeds the safe width.';
+    return {
+        vertical,
+        maxLineChars,
+        maxLines,
+        safeRect,
+        fontRule,
+        copy: [
+            vertical
+                ? 'Vertical format rules: design for 9:16 Shorts/Reels/TikTok framing.'
+                : 'Horizontal format rules: design for standard timeline framing.',
+            `Keep all caption text inside safe rectangle: ${safeRect}.`,
+            `Use max ${maxLines} lines per visible caption block and about ${maxLineChars} characters per line before splitting into a new phrase.`,
+            'Use CSS max-width around 86% for vertical captions, text-wrap: balance where supported, overflow-wrap: break-word, and line-height near 0.95-1.08.',
+            'Never let text touch or cross the canvas edges; no horizontal scrolling, clipped words, or text outside the stage.',
+            fontRule
+        ].join('\n')
+    };
+}
+
 function buildCaptionPrompt({ cues = [], style = 'clean', width = 1920, height = 1080, fps = 25 } = {}) {
     const limited = cues.slice(0, 120);
     const cueLines = limited.map(cue => `[${cue.start.toFixed(3)}-${cue.end.toFixed(3)}] ${cue.text}`).join('\n');
     const preset = CAPTION_STYLE_PRESETS[style] || CAPTION_STYLE_PRESETS.clean;
     const analysis = analyzeCaptionCues(limited);
-    const phraseLines = ['kinetic', 'social shorts'].includes(style)
+    const fit = captionFitRules({ width, height, style });
+    const phraseLines = ['kinetic', 'social shorts', 'bold hook'].includes(style)
         ? limited.slice(0, 60).flatMap(cue => splitCuePhrases(cue).map(phrase => `[${phrase.start.toFixed(3)}-${phrase.end.toFixed(3)}] ${phrase.text}`)).join('\n')
         : '';
     const wordLines = style === 'karaoke'
@@ -151,9 +197,11 @@ function buildCaptionPrompt({ cues = [], style = 'clean', width = 1920, height =
         `Motion: ${preset.motion}. Typography: ${preset.typography}.`,
         `Emphasis: ${preset.emphasis}.`,
         `Canvas: ${width}x${height} at ${fps}fps.`,
+        `Orientation: ${fit.vertical ? 'vertical 9:16 safe' : 'horizontal safe'}.`,
         `Transcript stats: ${analysis.cueCount} cues, ${analysis.wordCount} words, ${analysis.duration}s total transcript span.`,
         'Use window.renderFrame(frame, fps) and window.getAnimationDuration().',
         'Respect exact cue timing. Keep captions readable and inside safe margins.',
+        fit.copy,
         'Set html, body, and stage backgrounds to transparent; do not add an opaque full-frame background.',
         'If style is karaoke, highlight the active words over time. If style is kinetic, animate phrases without hurting readability.',
         'Use deterministic frame-based timing; do not rely on requestAnimationFrame, setTimeout, or CSS-only delays.',
@@ -206,6 +254,7 @@ module.exports = {
     CAPTION_STYLE_PRESETS,
     analyzeCaptionCues,
     buildCaptionPrompt,
+    captionFitRules,
     estimateWordTimings,
     parseCaptionText,
     parseTimecode,

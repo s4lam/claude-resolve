@@ -30,6 +30,7 @@ Repository: [s4lam/resolve-ai](https://github.com/s4lam/resolve-ai)
 - **Sessions**: keep chat/project history separated by Resolve project and timeline.
 - **Prompt Gallery + Templates**: reusable local prompts and community template packs.
 - **AI Clip Finder**: transcript-first long-form-to-Shorts candidate discovery with review before timeline creation.
+- **Vertical-safe subtitles**: generate transparent 9:16 caption overlays for selected Shorts with Clean, Kinetic, Karaoke, Social, Podcast, Bold Hook, and Documentary styles.
 - **Local-first storage**: assets, templates, renders, transcripts, sessions, and Ograph state stay on your machine.
 
 ## Requirements
@@ -40,6 +41,9 @@ Repository: [s4lam/resolve-ai](https://github.com/s4lam/resolve-ai)
 - One or both AI CLIs:
   - [OpenAI Codex CLI](https://developers.openai.com/codex/cli)
   - [Claude Code CLI](https://claude.ai/claude-code)
+- Optional local transcription:
+  - OpenAI Whisper CLI
+  - whisper.cpp / `whisper-cli` with a configured model path
 
 Resolve AI uses CLI auth. It does not ask for or store OpenAI or Anthropic API keys in the app.
 
@@ -170,7 +174,7 @@ Produce tools focus on timeline-aware work:
 
 - timeline context
 - lower thirds and title at playhead
-- captions
+- captions and vertical-safe subtitle overlays
 - render history
 - render settings
 - sync/reveal/add render outputs
@@ -179,10 +183,18 @@ Produce tools focus on timeline-aware work:
 
 Discover tools are for long-form editing helpers:
 
-- **AI Clip Finder**: import SRT/VTT/timestamped TXT, generate scored standalone short-form candidates, review, then create one timeline per selected short.
+- **AI Clip Finder**: import SRT/VTT/timestamped TXT or generate a local transcript with Whisper when configured. It scores standalone short-form candidates, lets you review/select them, then creates one timeline per selected Short.
+- **Short subtitles**: use **Caption this** on any selected candidate to create a transparent 1080x1920 caption overlay prompt. Caption cues are sliced to the Short range and offset to start at `0`, so timing matches the new Short timeline.
 - **AI Rough Cut**: generate reviewed keep ranges from timestamped transcript chunks, then create a non-destructive stitched timeline.
 
 The plugin does not auto-upload anywhere. It prepares local timelines, metadata, captions, and render packages.
+
+Subtitle fit rules for Shorts:
+
+- 9:16 canvas defaults to `1080x1920`.
+- Captions stay inside `x 7%-93%` and `y 12%-86%`.
+- Vertical captions are limited to 2 visible lines with short balanced line lengths.
+- Prompts require responsive font sizing, transparent backgrounds, and no clipped or edge-touching words.
 
 ## Render Presets
 
@@ -219,6 +231,7 @@ Settings > Diagnostics includes render health:
 - Media files stay local unless you explicitly export or upload them.
 - Assets, templates, Ographs, render history, sessions, and transcripts are stored locally.
 - Transcript text and prompts may be sent to the selected AI provider when you ask the AI to process them.
+- Local Whisper transcription stays on your machine when you use a local Whisper or whisper.cpp command.
 - Provider auth depends on the configured CLI.
 - Screenshots/media previews are not sent unless a workflow explicitly enables that behavior.
 - Manim Lab validates source before running and blocks unsafe imports/system access patterns.
@@ -238,6 +251,8 @@ Settings > Diagnostics includes render health:
 - **Ograph is empty**: generate an overlay and click **Save to Ograph**, or open Ograph and click **Capture latest result**.
 - **Manim Lab says setup needed**: install Python 3.11+ and Manim Community Edition with `python -m pip install manim`, then click **Retry**.
 - **AI Clip Finder cannot create timelines**: select exactly one Media Pool video clip and import a timestamped transcript. Untimestamped TXT cannot create frame-accurate cuts.
+- **Whisper is not ready**: install Whisper or whisper.cpp, then configure the command/model path in Settings. SRT/VTT import still works without Whisper.
+- **Short subtitles look too wide**: use the Shorts Studio **Caption this** flow rather than a generic caption prompt. It uses 1080x1920 and vertical safe-area rules.
 - **MP4 is not transparent**: use ProRes MOV.
 
 ## Development
@@ -280,7 +295,8 @@ Before publishing a GitHub Release:
 6. Render ProRes MOV.
 7. Test Ograph save/open/render.
 8. Test Manim Lab setup detection and source validation.
-9. Confirm existing user config, renders, assets, sessions, and templates survive update.
+9. Test AI Clip Finder caption prompts for selected Shorts at 1080x1920.
+10. Confirm existing user config, renders, assets, sessions, and templates survive update.
 
 ## Contributing
 

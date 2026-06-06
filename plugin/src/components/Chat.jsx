@@ -76,6 +76,7 @@ function RenderMovAction({ parsed, message, config, provider, model, validation,
     const [status, setStatus] = useState(null);
     const [progress, setProgress] = useState(0);
     const [errorMsg, setErrorMsg] = useState('');
+    const [reason, setReason] = useState('');
     const [ographStatus, setOgraphStatus] = useState('');
     const format = renderFormat(config);
 
@@ -92,6 +93,7 @@ function RenderMovAction({ parsed, message, config, provider, model, validation,
         setStatus('rendering');
         setProgress(0);
         setErrorMsg('');
+        setReason('');
         let queueJob = null;
         try {
             try {
@@ -132,7 +134,15 @@ function RenderMovAction({ parsed, message, config, provider, model, validation,
                 try {
                     if (queueJob?.id) await window.overlayAPI.queue?.({ action: 'complete', id: queueJob.id, result: { name: result.name, path: result.path } });
                 } catch { /* render queue is best-effort */ }
-                setStatus(result.warning ? 'rendered' : 'done');
+                if (result.placed) {
+                    setStatus('done');
+                } else if (result.imported) {
+                    setReason(result.placementReason || result.warning || 'timeline placement failed');
+                    setStatus('mediapool');
+                } else {
+                    setReason(result.placementReason || result.warning || 'Media Pool import failed');
+                    setStatus('rendered');
+                }
                 onRendered?.(result);
                 try {
                     if (window.ographAPI?.createFromGeneration) {
@@ -146,7 +156,7 @@ function RenderMovAction({ parsed, message, config, provider, model, validation,
                             validationWarnings: validation?.warnings || [],
                             rendered: true,
                             render: result.metadata || { name: result.name, path: result.path },
-                            timelineName: result.warning ? '' : 'Current timeline',
+                            timelineName: result.placed ? 'Current timeline' : '',
                             messageId: message.id
                         });
                         setOgraphStatus(graph?.id ? 'Ograph saved' : '');
@@ -194,10 +204,22 @@ function RenderMovAction({ parsed, message, config, provider, model, validation,
             </div>
         );
     }
+    if (status === 'mediapool') {
+        return (
+            <div className="render-action-stack">
+                <button className="btn-render warn" disabled title={reason}>
+                    Added to Media Pool - could not place on timeline: {reason}. Drag it in manually.
+                </button>
+                {ographStatus && <span>{ographStatus}</span>}
+            </div>
+        );
+    }
     if (status === 'rendered') {
         return (
             <div className="render-action-stack">
-                <button className="btn-render" disabled>Rendered &#10003;</button>
+                <button className="btn-render warn" disabled title={reason}>
+                    Rendered - Media Pool import needs attention: {reason}
+                </button>
                 {ographStatus && <span>{ographStatus}</span>}
             </div>
         );
