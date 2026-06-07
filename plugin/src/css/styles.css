@@ -1150,6 +1150,12 @@ body, #root {
     line-height: 1.35;
 }
 
+.manim-render-result small {
+    color: var(--fg-3);
+    font: var(--fs-10p5)/1.35 var(--font-mono);
+    overflow-wrap: anywhere;
+}
+
 .manim-ograph-status {
     color: var(--teal-200);
     font-size: var(--fs-11);

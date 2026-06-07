@@ -32,7 +32,8 @@ export default function SidebarManimLab({
     sourceDraft,
     onPrompt,
     onUsePrompt,
-    onOpenOgraph
+    onOpenOgraph,
+    onOpenRenders
 }) {
     const [health, setHealth] = useState(null);
     const [starterScenes, setStarterScenes] = useState([]);
@@ -274,6 +275,7 @@ export default function SidebarManimLab({
             <div className="manim-copy">
                 <strong>Use Manim for diagrams, equations, education, and technical explainers.</strong>
                 <p>Generate a Manim scene prompt, paste the reviewed Python source here, validate it, then render locally when Manim is ready.</p>
+                <p>Rendered MP4 files are saved to Resolve AI Render History. After render, use Reveal file, View Renders, Add at Playhead, or Sync to Media Pool.</p>
             </div>
 
             <div className="manim-form">
@@ -396,11 +398,15 @@ export default function SidebarManimLab({
                 )}
                 {renderResult?.success && (
                     <div className="manim-render-result">
-                        <strong>Rendered</strong>
+                        <strong>Rendered to Resolve AI Render History</strong>
                         <p>{renderResult.outputName}</p>
+                        {renderResult.outputPath && <small>{renderResult.outputPath}</small>}
                         <div className="manim-source-actions">
                             <button type="button" className="mini-action" onClick={revealRendered} disabled={busy}>
                                 Reveal file
+                            </button>
+                            <button type="button" className="mini-action" onClick={onOpenRenders} disabled={busy || !onOpenRenders}>
+                                View Renders
                             </button>
                             <button type="button" className="mini-action" onClick={addRenderedToTimeline} disabled={busy}>
                                 Add at Playhead
