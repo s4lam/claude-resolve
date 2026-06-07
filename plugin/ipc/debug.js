@@ -6,6 +6,8 @@ const { CONFIG_DIR, RENDER_DIR } = require('./paths');
 const { readConfig } = require('./config');
 const { readAssets } = require('./assets');
 const { getLastRenderError, getRenderHealth, summarizeRenderHealth } = require('./render-health');
+const { buildCapabilityReport, getLatestSafetySnapshot } = require('./resolve-diagnostics');
+const { listAnalysisReports } = require('./analysis');
 
 const DEBUG_DIR = path.join(CONFIG_DIR, 'debug-bundles');
 
@@ -26,7 +28,7 @@ function scrubObject(value) {
     return JSON.parse(JSON.stringify(value || null), (_key, item) => typeof item === 'string' ? scrub(item) : item);
 }
 
-function createDebugBundle(options = {}) {
+async function createDebugBundle(options = {}) {
     const now = new Date().toISOString();
     const safeName = now.replace(/[-:T.]/g, '').slice(0, 14);
     const filePath = path.join(options.debugDir || DEBUG_DIR, `resolve-ai-debug-${safeName}.json`);
@@ -41,7 +43,18 @@ function createDebugBundle(options = {}) {
         size: asset.size,
         path: scrub(asset.path)
     }));
-    const renderHealth = getRenderHealth(readConfig());
+    const config = readConfig();
+    const renderHealth = getRenderHealth(config);
+    let capabilityReport = null;
+    try {
+        capabilityReport = await buildCapabilityReport({ config });
+    } catch (error) {
+        capabilityReport = { status: 'unavailable', error: error.message || String(error) };
+    }
+    let safetySnapshot = null;
+    try { safetySnapshot = getLatestSafetySnapshot(); } catch (_err) { safetySnapshot = null; }
+    let analysisReports = [];
+    try { analysisReports = listAnalysisReports().slice(0, 20); } catch (_err) { analysisReports = []; }
     const bundle = {
         createdAt: now,
         app: {
@@ -53,7 +66,12 @@ function createDebugBundle(options = {}) {
             arch: process.arch,
             node: process.version
         },
-        config: scrubConfig(readConfig()),
+        config: scrubConfig(config),
+        resolveDiagnostics: {
+            capabilityReport: scrubObject(capabilityReport),
+            lastSafetySnapshot: scrubObject(safetySnapshot),
+            analysisReports: scrubObject(analysisReports)
+        },
         renderDiagnostics: {
             health: scrubObject(renderHealth),
             summary: scrubObject(summarizeRenderHealth(renderHealth)),

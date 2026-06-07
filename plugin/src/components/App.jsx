@@ -121,8 +121,16 @@ export default function App() {
         brandKit: {},
         selectedAssetIds: [],
         generation: { variationCount: 3, locks: {} },
-        captions: { defaultStyle: 'clean' },
+        captions: {
+            defaultStyle: 'clean',
+            defaultOutputMode: 'overlay',
+            defaultRegroupMode: 'punchy',
+            nativeTemplateName: 'Resolve AI Caption',
+            verticalSafe: true
+        },
         transcription: { provider: 'none', commandPath: '', model: 'base', language: '' },
+        analysis: { enabled: true, includeTranscription: true, includeAudioHints: true, publishMarkers: false },
+        resolve: { safetySnapshots: true },
         assets: { maxImportSizeMb: 25 },
         render: {
             renderPreset: 'prores_mov',
@@ -637,11 +645,14 @@ export default function App() {
     }
 
     function resizeForSidebar(open) {
-        window.windowAPI.getState?.().then(state => {
+        const windowApi = window.windowAPI;
+        if (!windowApi?.resize) return;
+        const stateRequest = windowApi.getState ? windowApi.getState() : Promise.resolve(null);
+        Promise.resolve(stateRequest).then(state => {
             if (state?.maximized || state?.fullScreen) return;
-            window.windowAPI.resize({ width: open ? 900 : 500, height: 740 }).catch(() => {});
+            windowApi.resize({ width: open ? 900 : 500, height: 740 }).catch(() => {});
         }).catch(() => {
-            window.windowAPI.resize({ width: open ? 900 : 500, height: 740 }).catch(() => {});
+            windowApi.resize({ width: open ? 900 : 500, height: 740 }).catch(() => {});
         });
     }
 
@@ -770,7 +781,7 @@ export default function App() {
                 sidebarOpen={sidebarOpen}
                 sidebarView={sidebar.view}
                 onOpenTools={handleToolsToggle}
-                onOpenSettings={handleSettingsToggle}
+                onOpenSettings={() => showSidebarView('settings')}
                 updateAvailable={updateAvailable}
                 sidePanel={sidePanel}
                 main={mainPanel}

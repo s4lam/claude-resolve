@@ -27,6 +27,8 @@ export default function WorkspaceRail({
     onOpenSettings,
     updateAvailable
 }) {
+    const settingsOpen = sidebarOpen && sidebarView === 'settings';
+
     return (
         <nav className="workspace-rail" aria-label="Resolve AI workspaces">
             <div className="workspace-rail-top">
@@ -58,9 +60,9 @@ export default function WorkspaceRail({
                 </button>
                 <button
                     type="button"
-                    className={'rail-icon' + (sidebarOpen && sidebarView === 'settings' ? ' active' : '')}
+                    className={'rail-icon' + (settingsOpen ? ' active' : '')}
                     onClick={onOpenSettings}
-                    aria-pressed={sidebarOpen && sidebarView === 'settings'}
+                    aria-pressed={settingsOpen}
                     aria-label="Open settings"
                     title="Settings"
                 >

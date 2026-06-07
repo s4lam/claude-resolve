@@ -34,13 +34,26 @@ const DEFAULTS = {
         }
     },
     captions: {
-        defaultStyle: 'clean'
+        defaultStyle: 'clean',
+        defaultOutputMode: 'overlay',
+        defaultRegroupMode: 'punchy',
+        nativeTemplateName: 'Resolve AI Caption',
+        verticalSafe: true
     },
     transcription: {
         provider: 'none',
         commandPath: '',
         model: 'base',
         language: ''
+    },
+    analysis: {
+        enabled: true,
+        includeTranscription: true,
+        includeAudioHints: true,
+        publishMarkers: false
+    },
+    resolve: {
+        safetySnapshots: true
     },
     assets: {
         maxImportSizeMb: 25
@@ -91,6 +104,8 @@ function mergeConfig(parsed = {}) {
         },
         captions: { ...(DEFAULTS.captions || {}), ...(parsed.captions || {}) },
         transcription: { ...(DEFAULTS.transcription || {}), ...(parsed.transcription || {}) },
+        analysis: { ...(DEFAULTS.analysis || {}), ...(parsed.analysis || {}) },
+        resolve: { ...(DEFAULTS.resolve || {}), ...(parsed.resolve || {}) },
         assets: { ...(DEFAULTS.assets || {}), ...(parsed.assets || {}) },
         render: mergeRenderSettings(DEFAULTS.render || {}, parsed.render || {}),
         ui: { ...(DEFAULTS.ui || {}), ...(parsed.ui || {}) },
@@ -127,6 +142,8 @@ function writeConfig(partial) {
             }
         },
         captions: { ...(current.captions || DEFAULTS.captions), ...(partial.captions || {}) },
+        analysis: { ...(current.analysis || DEFAULTS.analysis), ...(partial.analysis || {}) },
+        resolve: { ...(current.resolve || DEFAULTS.resolve), ...(partial.resolve || {}) },
         assets: { ...(current.assets || DEFAULTS.assets), ...(partial.assets || {}) },
         render: mergeRenderSettings(current.render || DEFAULTS.render, partial.render || {}),
         ui: { ...(current.ui || {}), ...(partial.ui || {}) },

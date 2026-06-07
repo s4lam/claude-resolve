@@ -389,7 +389,26 @@ async function main() {
     });
     mark('manim render reopened from ograph');
     await page.locator('.workspace-rail').getByRole('button', { name: 'Open settings' }).click();
-    await page.getByRole('button', { name: /Diagnostics/ }).click();
+    const settingsSidebar = page.locator('.sb-settings-view');
+    const settingsOpened = await settingsSidebar.waitFor({ timeout: 3000 }).then(() => true).catch(() => false);
+    if (!settingsOpened) {
+        const debug = await page.evaluate(() => ({
+            shell: document.querySelector('.workspace-shell')?.className || '',
+            sidebars: [...document.querySelectorAll('aside')].map(node => ({
+                className: node.className,
+                text: node.textContent.slice(0, 160)
+            })),
+            railButtons: [...document.querySelectorAll('.workspace-rail button')].map(node => ({
+                label: node.getAttribute('aria-label') || node.textContent.trim(),
+                pressed: node.getAttribute('aria-pressed'),
+                className: node.className
+            }))
+        }));
+        throw new Error(`Settings sidebar did not open: ${JSON.stringify({ ...debug, browserMessages: browserMessages.slice(-12) })}`);
+    }
+    const diagnosticsButton = settingsSidebar.getByRole('button', { name: /Diagnostics/ });
+    await diagnosticsButton.scrollIntoViewIfNeeded();
+    await diagnosticsButton.click();
     await page.getByRole('button', { name: 'Run runtime QA' }).click();
     await page.getByText('Workspace shell').waitFor({ timeout: 10000 });
     mark('runtime qa passed');

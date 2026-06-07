@@ -182,6 +182,8 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
     const [updating, setUpdating] = useState(false);
     const [health, setHealth] = useState(null);
     const [renderHealth, setRenderHealth] = useState(null);
+    const [capabilityReport, setCapabilityReport] = useState(null);
+    const [analysisReports, setAnalysisReports] = useState([]);
     const [lastRenderError, setLastRenderError] = useState(null);
     const [logs, setLogs] = useState([]);
     const [rawOpen, setRawOpen] = useState(!!config.ui?.rawLogsOpen);
@@ -190,6 +192,7 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
     const [timelineStatus, setTimelineStatus] = useState('');
     const [debugStatus, setDebugStatus] = useState('');
     const [renderDiagStatus, setRenderDiagStatus] = useState('');
+    const [safetyStatus, setSafetyStatus] = useState('');
     const [runtimeQA, setRuntimeQA] = useState(null);
     const [runtimeQAStatus, setRuntimeQAStatus] = useState('');
 
@@ -269,19 +272,30 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
     }
 
     async function refreshHealth() {
-        if (!window.agentAPI?.health) return;
-        try {
-            const nextHealth = await window.agentAPI.health();
-            const nextLogs = await window.agentAPI.getLogs({ includeHidden: true });
-            const nextRenderHealth = await window.overlayAPI?.getRenderHealth?.();
-            const nextRenderError = await window.overlayAPI?.getLastRenderError?.();
-            setHealth(nextHealth);
-            setLogs(nextLogs);
-            setRenderHealth(nextRenderHealth || null);
-            setLastRenderError(nextRenderError || null);
-        } catch {
-            setHealth(null);
-        }
+        const read = result => result.status === 'fulfilled' ? result.value : null;
+        const [
+            nextHealth,
+            nextLogs,
+            nextRenderHealth,
+            nextRenderError,
+            nextCapability,
+            nextAnalysisReports
+        ] = await Promise.allSettled([
+            window.agentAPI?.health?.(),
+            window.agentAPI?.getLogs?.({ includeHidden: true }),
+            window.overlayAPI?.getRenderHealth?.(),
+            window.overlayAPI?.getLastRenderError?.(),
+            window.resolveAPI?.capabilityReport?.(),
+            window.analysisAPI?.listReports?.()
+        ]);
+        const providerLogs = read(nextLogs);
+        const reports = read(nextAnalysisReports);
+        setHealth(read(nextHealth));
+        setLogs(Array.isArray(providerLogs) ? providerLogs : []);
+        setRenderHealth(read(nextRenderHealth) || null);
+        setCapabilityReport(read(nextCapability) || null);
+        setAnalysisReports(Array.isArray(reports) ? reports : []);
+        setLastRenderError(read(nextRenderError) || null);
     }
 
     async function handleRuntimeQA() {
@@ -326,6 +340,22 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
             setRenderDiagStatus('Failed');
         }
         setTimeout(() => setRenderDiagStatus(''), 2200);
+    }
+
+    async function handleCopySafetyReport() {
+        setSafetyStatus('Copying');
+        try {
+            await navigator.clipboard.writeText(JSON.stringify({
+                capabilityReport,
+                analysisReports,
+                renderHealth,
+                lastRenderError
+            }, null, 2));
+            setSafetyStatus('Copied');
+        } catch {
+            setSafetyStatus('Failed');
+        }
+        setTimeout(() => setSafetyStatus(''), 2200);
     }
 
     async function handleOpenRenderFolder() {
@@ -378,6 +408,15 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
         onConfigChange({
             render: {
                 ...(config.render || {}),
+                ...patch
+            }
+        });
+    }
+
+    function updateAnalysisSetting(patch) {
+        onConfigChange({
+            analysis: {
+                ...(config.analysis || {}),
                 ...patch
             }
         });
@@ -628,6 +667,59 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
                     </SettingRow>
                 </SettingsSection>
 
+                <SettingsSection title="Analysis Safety" meta={config.analysis?.enabled === false ? 'Off' : 'Source-safe'} defaultOpen={false}>
+                    <SettingRow label="Media analysis" help="Read selected media and write sidecar reports only. Source files are never modified.">
+                        <label className="settings-toggle">
+                            <input
+                                type="checkbox"
+                                checked={config.analysis?.enabled !== false}
+                                onChange={e => updateAnalysisSetting({ enabled: e.target.checked })}
+                            />
+                            <span>{config.analysis?.enabled === false ? 'Off' : 'On'}</span>
+                        </label>
+                    </SettingRow>
+                    <SettingRow label="Transcript status" help="Include transcript availability and cue coverage in analysis reports.">
+                        <label className="settings-toggle">
+                            <input
+                                type="checkbox"
+                                checked={config.analysis?.includeTranscription !== false}
+                                onChange={e => updateAnalysisSetting({ includeTranscription: e.target.checked })}
+                            />
+                            <span>{config.analysis?.includeTranscription === false ? 'Off' : 'On'}</span>
+                        </label>
+                    </SettingRow>
+                    <SettingRow label="Audio hints" help="Include conservative audio stream and transcript coverage hints.">
+                        <label className="settings-toggle">
+                            <input
+                                type="checkbox"
+                                checked={config.analysis?.includeAudioHints !== false}
+                                onChange={e => updateAnalysisSetting({ includeAudioHints: e.target.checked })}
+                            />
+                            <span>{config.analysis?.includeAudioHints === false ? 'Off' : 'On'}</span>
+                        </label>
+                    </SettingRow>
+                    <SettingRow label="Review markers" help="Keep marker publishing opt-in; exports stay as local reports by default.">
+                        <label className="settings-toggle">
+                            <input
+                                type="checkbox"
+                                checked={!!config.analysis?.publishMarkers}
+                                onChange={e => updateAnalysisSetting({ publishMarkers: e.target.checked })}
+                            />
+                            <span>{config.analysis?.publishMarkers ? 'Publish after review' : 'Report only'}</span>
+                        </label>
+                    </SettingRow>
+                    <SettingRow label="Safety snapshots" help="Save a local snapshot before Resolve AI creates timelines.">
+                        <label className="settings-toggle">
+                            <input
+                                type="checkbox"
+                                checked={config.resolve?.safetySnapshots !== false}
+                                onChange={e => onConfigChange({ resolve: { ...(config.resolve || {}), safetySnapshots: e.target.checked } })}
+                            />
+                            <span>{config.resolve?.safetySnapshots === false ? 'Off' : 'On'}</span>
+                        </label>
+                    </SettingRow>
+                </SettingsSection>
+
                 <SettingsSection title="Brand Kit" meta={`${brandFilledCount}/5 fields`} defaultOpen={false}>
                     <SettingRow label="Colors" help="Comma-separated brand colors.">
                         <input
@@ -723,6 +815,37 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
                             <button className="settings-small-btn" onClick={refreshHealth}>Retry render check</button>
                             <button className="settings-small-btn" onClick={handleCopyRenderDiagnostics}>{renderDiagStatus || 'Copy render diagnostics'}</button>
                             <button className="settings-small-btn" onClick={handleOpenRenderFolder}>Open render folder</button>
+                        </div>
+                    </div>
+                    <div className="render-health-card">
+                        <div className="render-health-head">
+                            <div>
+                                <strong>Resolve capability report</strong>
+                                <span>{capabilityReport?.resolve?.status === 'ready' ? `Resolve ${capabilityReport.resolve.version || ''}` : 'Resolve API unavailable or not open'}</span>
+                            </div>
+                            <StatusPill state={capabilityReport?.resolve?.status === 'ready' ? 'ready' : 'needs-attention'} />
+                        </div>
+                        <div className="render-health-grid">
+                            {(capabilityReport?.capabilities || []).slice(0, 8).map(item => (
+                                <div key={item.id}>
+                                    <span>{item.label}</span>
+                                    <strong>{item.status === 'ready' ? 'Ready' : item.status === 'partial' ? 'Partial' : 'Unavailable'}</strong>
+                                </div>
+                            ))}
+                        </div>
+                        {(capabilityReport?.capabilities || []).some(item => item.fallback) && (
+                            <div className="render-health-list warning">
+                                {capabilityReport.capabilities.filter(item => item.fallback).slice(0, 3).map(item => <span key={item.id}>{item.fallback}</span>)}
+                            </div>
+                        )}
+                        <div className="render-health-grid">
+                            <div><span>Analysis reports</span><strong>{analysisReports.length}</strong></div>
+                            <div><span>Safety snapshots</span><strong>{config.resolve?.safetySnapshots === false ? 'Off' : 'On'}</strong></div>
+                            <div><span>Publish markers</span><strong>{config.analysis?.publishMarkers ? 'On' : 'Review only'}</strong></div>
+                        </div>
+                        <div className="diagnostic-actions">
+                            <button className="settings-small-btn" onClick={refreshHealth}>Refresh Resolve report</button>
+                            <button className="settings-small-btn" onClick={handleCopySafetyReport}>{safetyStatus || 'Copy safety report'}</button>
                         </div>
                     </div>
                     <div className="runtime-qa-card">

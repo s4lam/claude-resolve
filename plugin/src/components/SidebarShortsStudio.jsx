@@ -132,7 +132,7 @@ function packageRenderLabel(item = {}) {
     return `${plan.resolution || '1080x1920'} / ${plan.codec || 'H.265'} / ${plan.fps ? `${plan.fps} fps` : 'timeline fps'}`;
 }
 
-export default function SidebarShortsStudio({ latestAssistantText, onPrompt }) {
+export default function SidebarShortsStudio({ config, onConfigChange, latestAssistantText, onPrompt }) {
     const [sourceState, setSourceState] = useState({ state: 'checking', message: 'Checking Media Pool selection', clip: null });
     const [transcript, setTranscript] = useState(null);
     const [pastedTranscript, setPastedTranscript] = useState('');
@@ -150,6 +150,7 @@ export default function SidebarShortsStudio({ latestAssistantText, onPrompt }) {
     const [creatorProfile, setCreatorProfile] = useState(null);
     const [packageResult, setPackageResult] = useState(null);
     const [timelineResult, setTimelineResult] = useState(null);
+    const [analysisReport, setAnalysisReport] = useState(null);
     const [status, setStatus] = useState('');
     const [awaitingJson, setAwaitingJson] = useState(false);
     const lastValidated = useRef('');
@@ -204,8 +205,27 @@ export default function SidebarShortsStudio({ latestAssistantText, onPrompt }) {
         try {
             const result = await window.shortsAPI.getSource();
             setSourceState(result || { state: 'unavailable', message: 'Resolve selection unavailable', clip: null });
+            setAnalysisReport(null);
         } catch {
             setSourceState({ state: 'unavailable', message: 'Resolve selection unavailable', clip: null });
+            setAnalysisReport(null);
+        }
+    }
+
+    async function analyzeSelectedClip() {
+        if (!clip) return;
+        setTransientStatus('Analyzing selected clip', 0);
+        try {
+            const result = await window.analysisAPI?.probeMedia?.({
+                clip,
+                transcript,
+                candidates: candidateData?.clips || []
+            });
+            setAnalysisReport(result || null);
+            setTransientStatus(result?.success ? 'Source-safe analysis ready' : (result?.errors?.[0] || 'Analysis unavailable'), 4200);
+        } catch (err) {
+            setAnalysisReport(null);
+            setTransientStatus(err?.message || 'Analysis failed', 4200);
         }
     }
 
@@ -297,6 +317,7 @@ export default function SidebarShortsStudio({ latestAssistantText, onPrompt }) {
                 handleSeconds,
                 transcriptOffsetSeconds,
                 clip,
+                analysisReport,
                 maxClips: 8
             });
             const accepted = onPrompt(result.prompt, {
@@ -401,7 +422,18 @@ export default function SidebarShortsStudio({ latestAssistantText, onPrompt }) {
                 candidates: candidateData.clips,
                 selectedIndexes: selectedIndexesFromMap(selected)
             });
-            setTransientStatus(result.success ? `Markers exported: ${result.filePath}` : (result.error || 'Marker export failed'), 5200);
+            if (result.success && config?.analysis?.publishMarkers && window.markerAPI?.addReviewMarkers) {
+                const publish = await window.markerAPI.addReviewMarkers({
+                    fps: clip?.fps || 30,
+                    markers: (result.markers || []).map(marker => ({
+                        ...marker,
+                        tags: marker.tags || ['review']
+                    }))
+                });
+                setTransientStatus(publish?.success ? `Markers added: ${publish.added}` : (publish?.reason || 'Marker report exported'), 5200);
+            } else {
+                setTransientStatus(result.success ? `Markers exported: ${result.filePath}` : (result.error || 'Marker export failed'), 5200);
+            }
         } catch (err) {
             setTransientStatus(err?.message || 'Marker export failed', 5200);
         }
@@ -492,6 +524,35 @@ export default function SidebarShortsStudio({ latestAssistantText, onPrompt }) {
         const candidateCues = cuesForCandidate(transcript?.cues || [], candidate, transcriptOffsetSeconds);
         let prompt = '';
         if (candidateCues.length && window.captionAPI?.generate) {
+            if (window.captionAPI?.saveProject && onConfigChange) {
+                const project = await window.captionAPI.saveProject({
+                    title: candidate.title || candidate.publish?.title || 'Short Caption Project',
+                    source: {
+                        type: 'shorts-studio',
+                        candidateIndex: candidate.index,
+                        candidateTitle: candidate.title,
+                        range: { start: candidate.start, end: candidate.end }
+                    },
+                    cues: candidateCues,
+                    style: captionStyle,
+                    outputMode: 'overlay',
+                    regroupMode: 'punchy',
+                    fitOptions: { width: 1080, height: 1920, fps: clip?.fps || 30 },
+                    warnings: ['Imported from Shorts Studio. Review regrouping before final render.']
+                });
+                await onConfigChange({
+                    ui: { activeToolTab: 'captions' },
+                    captions: {
+                        ...(config?.captions || {}),
+                        activeProjectId: project.id,
+                        defaultStyle: captionStyle,
+                        defaultOutputMode: 'overlay',
+                        verticalSafe: true
+                    }
+                });
+                setTransientStatus('Opened in Caption Studio');
+                return;
+            }
             const result = await window.captionAPI.generate({
                 cues: candidateCues,
                 style: captionStyle,
@@ -539,7 +600,10 @@ export default function SidebarShortsStudio({ latestAssistantText, onPrompt }) {
             <section className="shorts-panel">
                 <div className="timeline-subhead-row">
                     <span className="timeline-subhead">Source</span>
-                    <button className="mini-action" type="button" onClick={refreshSource}>Refresh source</button>
+                    <span className="sb-actions">
+                        <button className="mini-action" type="button" onClick={analyzeSelectedClip} disabled={!clip || config?.analysis?.enabled === false}>Analyze selected clip</button>
+                        <button className="mini-action" type="button" onClick={refreshSource}>Refresh source</button>
+                    </span>
                 </div>
                 <div className="timeline-context-card rough-cut-clip-card">
                     <span className={'status-dot ' + (sourceState.state === 'ready' ? 'ready' : 'warn')} />
@@ -549,6 +613,13 @@ export default function SidebarShortsStudio({ latestAssistantText, onPrompt }) {
                         <small>Compound clips work if they are selected as Media Pool items with readable timing.</small>
                     </div>
                 </div>
+                {analysisReport && (
+                    <div className={'rough-transcript-state ' + (analysisReport.success ? 'ready' : 'warn')}>
+                        {analysisReport.success
+                            ? `Analysis: ${analysisReport.technical?.video?.codec || 'video'} / ${analysisReport.technical?.audio?.codec || 'audio'} / ${formatSeconds(analysisReport.technical?.durationSeconds)}`
+                            : `Analysis unavailable: ${analysisReport.errors?.[0] || 'ffprobe not available'}`}
+                    </div>
+                )}
             </section>
 
             <section className="shorts-panel">

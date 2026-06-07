@@ -1,11 +1,21 @@
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const {
   analyzeCaptionCues,
   buildCaptionPrompt,
+  buildNativeTextPayload,
   captionFitRules,
+  deleteCaptionProject,
+  detectNativeText,
   estimateWordTimings,
+  getCaptionProject,
+  listCaptionProjects,
   parseCaptionText,
-  splitCuePhrases
+  regroupCues,
+  saveCaptionProject,
+  validateCaptionFit
 } = require('../ipc/captions');
 
 const cues = parseCaptionText(`1
@@ -28,40 +38,36 @@ Fast intro`, 'vtt');
 assert.strictEqual(vtt.length, 1);
 assert.strictEqual(vtt[0].end, 1.2);
 
-const shortVtt = parseCaptionText(`WEBVTT
+const timestampedTxt = parseCaptionText(`[00:00:05.500] Timestamped text works
+00:00:07.000 --> 00:00:08.000 second cue`, 'txt');
+assert.strictEqual(timestampedTxt.length, 2);
+assert.strictEqual(timestampedTxt[0].start, 5.5);
 
-00:01.000 --> 00:02.000
-Short format`, 'vtt');
-assert.strictEqual(shortVtt.length, 1);
-assert.strictEqual(shortVtt[0].start, 1);
+const untimestampedTxt = parseCaptionText('No timing here', 'txt');
+assert.strictEqual(untimestampedTxt.length, 0);
 
 const prompt = buildCaptionPrompt({ cues, style: 'karaoke', width: 1920, height: 1080, fps: 25 });
-assert(prompt.includes('karaoke'));
-assert(prompt.includes('Welcome to the show'));
-assert(prompt.includes('transparent ProRes 4444 overlay'));
-assert(prompt.includes('backgrounds to transparent'));
+assert(prompt.includes('transparent caption overlay'));
+assert(prompt.includes('Style: karaoke'));
 assert(prompt.includes('<caption_words>'));
-assert(prompt.includes('Transcript stats'));
-
-const kineticPrompt = buildCaptionPrompt({ cues, style: 'kinetic', width: 1920, height: 1080, fps: 25 });
-assert(kineticPrompt.includes('<caption_phrases>'));
+assert(prompt.includes('Caption stats'));
 
 const verticalPrompt = buildCaptionPrompt({ cues, style: 'social shorts', width: 1080, height: 1920, fps: 30 });
-assert(verticalPrompt.includes('Orientation: vertical 9:16 safe'));
+assert(verticalPrompt.includes('Output orientation: vertical'));
 assert(verticalPrompt.includes('x 7%-93%, y 12%-86%'));
-assert(verticalPrompt.includes('max 2 lines'));
-assert(verticalPrompt.includes('max-width around 86%'));
-assert(verticalPrompt.includes('no horizontal scrolling, clipped words, or text outside the stage'));
+assert(verticalPrompt.includes('max-width 86%'));
+assert(verticalPrompt.includes('max 2 visible lines'));
+assert(verticalPrompt.includes('no clipped words'));
 
 const boldHookPrompt = buildCaptionPrompt({ cues, style: 'bold hook', width: 1080, height: 1920, fps: 30 });
-assert(boldHookPrompt.includes('Bold hook captions'));
-assert(boldHookPrompt.includes('<caption_phrases>'));
+assert(boldHookPrompt.includes('Style: bold hook'));
+assert(boldHookPrompt.includes('<caption_words>'));
 
 const documentaryPrompt = buildCaptionPrompt({ cues, style: 'documentary', width: 1080, height: 1920, fps: 30 });
-assert(documentaryPrompt.includes('Minimal documentary captions'));
+assert(documentaryPrompt.includes('Style: documentary'));
 
 const verticalFit = captionFitRules({ width: 1080, height: 1920, style: 'bold hook' });
-assert.strictEqual(verticalFit.vertical, true);
+assert.strictEqual(verticalFit.orientation, 'vertical');
 assert.strictEqual(verticalFit.maxLines, 2);
 
 const timings = estimateWordTimings(cues[0]);
@@ -70,9 +76,38 @@ assert.strictEqual(timings[0].word, 'Welcome');
 assert.strictEqual(timings[0].start, 1);
 assert.strictEqual(timings[timings.length - 1].end, 2.5);
 
-const phrases = splitCuePhrases({ start: 0, end: 4, text: 'one two three four five six' }, 3);
-assert.strictEqual(phrases.length, 2);
-assert.strictEqual(phrases[0].text, 'one two three');
+const regrouped = regroupCues(parseCaptionText(`1
+00:00:00,000 --> 00:00:06,000
+one two three four five six seven eight`, 'srt'), { mode: 'punchy', maxWords: 3, maxChars: 30 });
+assert.strictEqual(regrouped.cues.length, 3);
+assert.strictEqual(regrouped.cues[0].text, 'one two three');
+assert(regrouped.cues[0].end <= regrouped.cues[1].start);
+
+const single = regroupCues(cues, { mode: 'single' });
+assert(single.cues.every(cue => cue.text.split(/\s+/).length === 1));
+
+const fitWarnings = validateCaptionFit([{ start: 0, end: 1, text: 'This caption is intentionally too long for vertical shorts and should warn loudly' }], { width: 1080, height: 1920, style: 'bold hook' });
+assert(fitWarnings.warnings.length > 0);
+
+const nativePayload = buildNativeTextPayload({
+  cues: [{ start: 0, end: 1, text: 'hello"); os.execute("bad") --' }],
+  templateName: 'Resolve AI Caption',
+  fps: 30
+});
+assert.strictEqual(nativePayload.cues.length, 1);
+assert(nativePayload.cues[0].text.includes('os.execute'));
+assert(!JSON.stringify(nativePayload).includes('CAPTION_JOB'));
+
+const missingNative = detectNativeText({ fuscriptPath: path.join(os.tmpdir(), 'missing-fuscript'), templateName: 'Resolve AI Caption' });
+assert.strictEqual(missingNative.ready, false);
+
+const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve-ai-caption-test-'));
+const saved = saveCaptionProject({ title: 'Round trip', cues, style: 'clean' }, projectDir);
+assert(saved.id);
+assert.strictEqual(listCaptionProjects(projectDir).length, 1);
+assert.strictEqual(getCaptionProject(saved.id, projectDir).title, 'Round trip');
+deleteCaptionProject(saved.id, projectDir);
+assert.strictEqual(listCaptionProjects(projectDir).length, 0);
 
 const analysis = analyzeCaptionCues(cues);
 assert.strictEqual(analysis.cueCount, 2);

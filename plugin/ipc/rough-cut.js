@@ -36,6 +36,19 @@ const DIRECT_INTELLISCRIPT_CANDIDATES = [
     'Intelliscript'
 ];
 
+async function saveTimelineSafetySnapshot(action, payload) {
+    try {
+        if (readConfig().resolve?.safetySnapshots === false) return null;
+        const { createSafetySnapshot } = require('./resolve-diagnostics');
+        return await createSafetySnapshot({
+            action,
+            ...payload
+        });
+    } catch (_err) {
+        return null;
+    }
+}
+
 function getResolveApi() {
     return require('./resolve');
 }
@@ -1594,7 +1607,7 @@ async function handleApplyCutPlan(_event, payload = {}) {
     const plan = payload.planId ? getCutPlan(payload.planId) : payload.plan;
     const ranges = payload.normalizedRanges || plan?.normalizedRanges || [];
     if (!ranges.length) return { success: false, error: 'No normalized keep ranges to apply.' };
-    return createTimelineFromRanges({
+    const result = await createTimelineFromRanges({
         ...context,
         ranges,
         timelineName: payload.timelineName || makeTimelineName(context.clip.name),
@@ -1602,6 +1615,19 @@ async function handleApplyCutPlan(_event, payload = {}) {
         addMarkers: payload.addMarkers !== false,
         markerPrefix: 'AI keep'
     });
+    if (result?.success) {
+        const snapshot = await saveTimelineSafetySnapshot('roughCut:applyCutPlan', {
+            source: 'rough-cut',
+            clip: context.clip,
+            planId: payload.planId || plan?.id || null,
+            planGoal: plan?.goal || payload.plan?.goal || null,
+            plannedRanges: ranges,
+            result,
+            createdTimelineNames: result.timelineName ? [result.timelineName] : []
+        });
+        if (snapshot) result.safetySnapshotId = snapshot.id;
+    }
+    return result;
 }
 
 async function handleApplyShortsPlan(_event, payload = {}) {

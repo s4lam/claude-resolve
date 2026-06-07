@@ -2309,6 +2309,201 @@ body, #root {
     font-size: var(--fs-11p5);
     line-height: 1.45;
 }
+
+.caption-workflow-card {
+    display: grid;
+    gap: var(--size-8);
+    padding: var(--size-10);
+    border: var(--size-1) solid var(--line-soft);
+    border-radius: var(--size-8);
+    background: var(--bg-2);
+}
+
+.caption-workflow-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--size-8);
+}
+
+.caption-workflow-head strong {
+    font-size: var(--fs-12p5);
+    color: var(--fg-0);
+}
+
+.caption-workflow-head span,
+.caption-status {
+    min-width: 0;
+    color: var(--fg-3);
+    font-size: var(--fs-11);
+    overflow-wrap: anywhere;
+}
+
+.caption-transcript-input {
+    min-height: 112px;
+}
+
+.caption-regroup-controls {
+    grid-template-columns: 1fr 72px 72px auto;
+    align-items: end;
+}
+
+.caption-controls input,
+.caption-controls select,
+.caption-regroup-controls input,
+.caption-regroup-controls select {
+    width: 100%;
+    min-height: var(--size-32);
+    border: var(--size-1) solid var(--line-soft);
+    border-radius: var(--size-6);
+    background: var(--bg-sunken);
+    color: var(--fg-0);
+    padding: 0 var(--size-8);
+}
+
+.caption-controls input:focus,
+.caption-controls select:focus,
+.caption-regroup-controls input:focus,
+.caption-regroup-controls select:focus {
+    outline: none;
+    border-color: var(--warm-border);
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.caption-editor-actions,
+.caption-cue-meta,
+.caption-cue-meta div,
+.caption-output-toggle,
+.caption-project-row {
+    display: flex;
+    align-items: center;
+    gap: var(--size-6);
+}
+
+.caption-warning-list {
+    display: grid;
+    gap: var(--size-4);
+    color: var(--color-warn);
+    font-size: var(--fs-11);
+    line-height: 1.35;
+}
+
+.caption-editor-list {
+    max-height: 360px;
+}
+
+.caption-cue.editor {
+    gap: var(--size-7);
+}
+
+.caption-cue-meta {
+    justify-content: space-between;
+}
+
+.caption-cue-meta button {
+    min-height: 26px;
+    border: var(--size-1) solid var(--line-soft);
+    border-radius: var(--size-5);
+    background: var(--bg-3);
+    color: var(--fg-2);
+    font-size: var(--fs-10);
+    cursor: pointer;
+}
+
+.caption-cue-meta button:hover,
+.caption-cue-meta button:focus-visible {
+    color: var(--fg-0);
+    border-color: var(--warm-border);
+}
+
+.caption-cue.editor textarea {
+    width: 100%;
+    min-height: 54px;
+    resize: vertical;
+    border: var(--size-1) solid var(--line-soft);
+    border-radius: var(--size-6);
+    background: var(--bg-sunken);
+    color: var(--fg-0);
+    padding: var(--size-8);
+    line-height: 1.35;
+}
+
+.caption-cue.editor textarea:focus {
+    outline: none;
+    border-color: var(--warm-border);
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.caption-output-toggle {
+    padding: var(--size-3);
+    border: var(--size-1) solid var(--line-soft);
+    border-radius: var(--size-7);
+    background: var(--bg-sunken);
+}
+
+.caption-output-toggle button {
+    flex: 1;
+    min-height: var(--size-32);
+    border: 0;
+    border-radius: var(--size-5);
+    background: transparent;
+    color: var(--fg-3);
+    cursor: pointer;
+}
+
+.caption-output-toggle button.active {
+    color: var(--fg-0);
+    background: var(--warm-bg-soft);
+}
+
+.caption-output-toggle button:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus-ring);
+}
+
+.caption-output-panel,
+.caption-project-list {
+    display: grid;
+    gap: var(--size-8);
+}
+
+.caption-project-row {
+    width: 100%;
+    justify-content: space-between;
+    border: var(--size-1) solid var(--line-soft);
+    border-radius: var(--size-6);
+    background: var(--bg-sunken);
+    color: var(--fg-2);
+    padding: var(--size-8);
+    text-align: left;
+    cursor: pointer;
+}
+
+.caption-project-row.active,
+.caption-project-row:hover,
+.caption-project-row:focus-visible {
+    border-color: var(--warm-border);
+    color: var(--fg-0);
+}
+
+.caption-project-row span {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.caption-project-row small {
+    color: var(--fg-3);
+    white-space: nowrap;
+}
+
+.caption-project-row em {
+    font-style: normal;
+    color: var(--color-error);
+    font-size: var(--fs-10);
+}
 .gallery-section {
     overflow: hidden;
 }

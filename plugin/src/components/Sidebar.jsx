@@ -93,9 +93,10 @@ export default function Sidebar({
     }, [config?.ui?.focusOgraphId, view]);
 
     useEffect(() => {
+        if (view !== 'tools') return;
         if (!sourceDraft?.source) return;
         openTool('manim', sourceDraft);
-    }, [sourceDraft?.revision]);
+    }, [sourceDraft?.revision, view]);
 
     if (view === 'settings') {
         return (
@@ -127,7 +128,7 @@ export default function Sidebar({
         if (activeTool === 'timeline') return <SidebarTimeline config={config} onPrompt={onUsePrompt || onPrompt} />;
         if (activeTool === 'ograph') return <SidebarOgraph config={config} activeSession={activeSession} latestGeneration={latestGeneration} focusGraphId={focusedOgraphId} onPrompt={onPrompt} onUsePrompt={onUsePrompt || onPrompt} onOpenManim={(payload) => openTool('manim', payload)} />;
         if (activeTool === 'manim') return <SidebarManimLab config={config} latestGeneration={latestGeneration} latestAssistantText={latestAssistantText} sourceDraft={manimDraft} onPrompt={onPrompt} onUsePrompt={onUsePrompt || onPrompt} onOpenOgraph={(graphId) => openTool('ograph', { graphId })} />;
-        if (activeTool === 'shorts-studio') return <SidebarShortsStudio latestAssistantText={latestAssistantText} onPrompt={onPrompt} />;
+        if (activeTool === 'shorts-studio') return <SidebarShortsStudio config={config} onConfigChange={onConfigChange} latestAssistantText={latestAssistantText} onPrompt={onPrompt} />;
         if (activeTool === 'rough-cut') return <SidebarRoughCut config={config} latestAssistantText={latestAssistantText} onPrompt={onPrompt} />;
         if (activeTool === 'variations') return <SidebarVariations config={config} onConfigChange={onConfigChange} latestGeneration={latestGeneration} onPrompt={onPrompt} onUsePrompt={onUsePrompt || onPrompt} />;
         if (activeTool === 'renders') return <SidebarAssets onPrompt={onUsePrompt || onPrompt} />;

@@ -372,8 +372,21 @@ async function handleImport(_event, payload = {}) {
 function handleBuildCandidates(_event, payload = {}) {
     const creatorProfile = buildCreatorProfile();
     const result = handleBuildShortsPlan(_event, { ...payload, creatorProfile });
+    const analysis = payload.analysisReport;
+    const analysisContext = analysis ? [
+        '',
+        '<source_safe_analysis>',
+        analysis.success ? 'status: ready' : 'status: unavailable',
+        analysis.technical?.durationSeconds ? `duration: ${analysis.technical.durationSeconds}s` : '',
+        analysis.technical?.video?.codec ? `video: ${analysis.technical.video.codec} ${analysis.technical.video.width || ''}x${analysis.technical.video.height || ''} ${analysis.technical.video.fps || ''}fps` : '',
+        analysis.technical?.audio?.codec ? `audio: ${analysis.technical.audio.codec} ${analysis.technical.audio.channels || ''}ch` : '',
+        Array.isArray(analysis.audioHints) && analysis.audioHints.length ? `audio_hints: ${analysis.audioHints.join('; ')}` : '',
+        analysis.transcription?.provided ? `transcript_cues: ${analysis.transcription.cueCount}` : '',
+        '</source_safe_analysis>'
+    ].filter(Boolean).join('\n') : '';
     return {
         ...result,
+        prompt: `${result.prompt || ''}${analysisContext}`,
         creatorProfile,
         displayText: `AI Clip Finder: ${cleanText(payload.goal || 'find standalone shorts')}`
     };
@@ -415,6 +428,19 @@ async function handleCreateTimelines(_event, payload = {}) {
         addMarkers: payload.addMarkers !== false,
         includeAudio: payload.includeAudio !== false
     });
+    try {
+        if (readConfig().resolve?.safetySnapshots !== false) {
+            await require('./resolve-diagnostics').createSafetySnapshot({
+                action: 'shorts:createTimelines',
+                source: project?.source || payload.source || {},
+                plan: { selectedIndexes, candidateCount: candidates.length },
+                result: { success: result.success, created: result.created, errors: result.errors || [] },
+                createdTimelineNames: (result.results || []).filter(item => item.success).map(item => item.timelineName)
+            });
+        }
+    } catch (_err) {
+        // Safety snapshots are diagnostic; timeline creation result should remain authoritative.
+    }
     if (project) {
         const created = (result.results || [])
             .filter(item => item.success)

@@ -30,7 +30,7 @@ Repository: [s4lam/resolve-ai](https://github.com/s4lam/resolve-ai)
 - **Sessions**: keep chat/project history separated by Resolve project and timeline.
 - **Prompt Gallery + Templates**: reusable local prompts and community template packs.
 - **AI Clip Finder**: transcript-first long-form-to-Shorts candidate discovery with review before timeline creation.
-- **Vertical-safe subtitles**: generate transparent 9:16 caption overlays for selected Shorts with Clean, Kinetic, Karaoke, Social, Podcast, Bold Hook, and Documentary styles.
+- **Caption Studio 2.0**: import transcripts, regroup phrases, edit captions, generate transparent 9:16 overlays, or use feature-gated native Resolve Text+ captions.
 - **Local-first storage**: assets, templates, renders, transcripts, sessions, and Ograph state stay on your machine.
 
 ## Requirements
@@ -184,7 +184,8 @@ Produce tools focus on timeline-aware work:
 Discover tools are for long-form editing helpers:
 
 - **AI Clip Finder**: import SRT/VTT/timestamped TXT or generate a local transcript with Whisper when configured. It scores standalone short-form candidates, lets you review/select them, then creates one timeline per selected Short.
-- **Short subtitles**: use **Caption this** on any selected candidate to create a transparent 1080x1920 caption overlay prompt. Caption cues are sliced to the Short range and offset to start at `0`, so timing matches the new Short timeline.
+- **Short subtitles**: use **Caption this** on any selected candidate to open Caption Studio with that Short's transcript slice. Caption cues are offset to start at `0`, so timing matches the new Short timeline.
+- **Caption Studio**: regroup captions as whole sentences, punchy short-form phrases, karaoke highlights, single words, or custom phrase lengths. Default output is transparent overlay HTML/ProRes. Native Resolve Text+ output is advanced and only enables when `fuscript` and a Media Pool caption template named `Resolve AI Caption` are available.
 - **AI Rough Cut**: generate reviewed keep ranges from timestamped transcript chunks, then create a non-destructive stitched timeline.
 
 The plugin does not auto-upload anywhere. It prepares local timelines, metadata, captions, and render packages.
@@ -195,6 +196,7 @@ Subtitle fit rules for Shorts:
 - Captions stay inside `x 7%-93%` and `y 12%-86%`.
 - Vertical captions are limited to 2 visible lines with short balanced line lengths.
 - Prompts require responsive font sizing, transparent backgrounds, and no clipped or edge-touching words.
+- Native Text+ captions remain editable inside Resolve, but require a trusted Text+ template in the Media Pool.
 
 ## Render Presets
 
@@ -224,14 +226,26 @@ Settings > Diagnostics includes render health:
 - Playwright Chromium check
 - last render error
 
+It also includes a Resolve capability report for scripting-dependent workflows:
+
+- selected Media Pool clip access
+- current timeline access
+- timeline creation/append support
+- review marker support
+- Resolve render-setting probes
+- transcription and native Text+/Fusion availability
+
+If a capability is unavailable, Resolve AI shows the fallback instead of failing silently.
+
 `ffmpeg-static` downloads platform FFmpeg binaries during dependency install. Those binaries have their own FFmpeg licensing terms.
 
 ## Privacy And Safety
 
 - Media files stay local unless you explicitly export or upload them.
-- Assets, templates, Ographs, render history, sessions, and transcripts are stored locally.
+- Assets, templates, Ographs, render history, sessions, transcripts, media analysis reports, and timeline safety snapshots are stored locally.
 - Transcript text and prompts may be sent to the selected AI provider when you ask the AI to process them.
 - Local Whisper transcription stays on your machine when you use a local Whisper or whisper.cpp command.
+- Source-safe media analysis reads media metadata and writes Resolve AI sidecar reports only. It does not modify, transcode, proxy, relink, or overwrite source media.
 - Provider auth depends on the configured CLI.
 - Screenshots/media previews are not sent unless a workflow explicitly enables that behavior.
 - Manim Lab validates source before running and blocks unsafe imports/system access patterns.
@@ -253,6 +267,7 @@ Settings > Diagnostics includes render health:
 - **AI Clip Finder cannot create timelines**: select exactly one Media Pool video clip and import a timestamped transcript. Untimestamped TXT cannot create frame-accurate cuts.
 - **Whisper is not ready**: install Whisper or whisper.cpp, then configure the command/model path in Settings. SRT/VTT import still works without Whisper.
 - **Short subtitles look too wide**: use the Shorts Studio **Caption this** flow rather than a generic caption prompt. It uses 1080x1920 and vertical safe-area rules.
+- **Native Text+ is unavailable**: import or create a Text+ caption template in the Media Pool named `Resolve AI Caption`, and make sure Resolve's `fuscript` binary exists. Transparent overlay captions still work without this.
 - **MP4 is not transparent**: use ProRes MOV.
 
 ## Development

@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('resolveAPI', {
     // Timeline
     getCurrentTimeline: () => ipcRenderer.invoke('resolve:getCurrentTimeline'),
     getTimelineSettings: () => ipcRenderer.invoke('resolve:getTimelineSettings'),
+    capabilityReport: () => ipcRenderer.invoke('resolve:capabilityReport'),
+    safetySnapshot: (payload) => ipcRenderer.invoke('resolve:safetySnapshot', payload),
 
     // Lifecycle
     cleanup: () => ipcRenderer.invoke('resolve:cleanup')
@@ -147,7 +149,17 @@ contextBridge.exposeInMainWorld('galleryAPI', {
 contextBridge.exposeInMainWorld('captionAPI', {
     import: () => ipcRenderer.invoke('captions:import'),
     parse: (payload) => ipcRenderer.invoke('captions:parse', payload),
-    generate: (payload) => ipcRenderer.invoke('captions:generate', payload)
+    generate: (payload) => ipcRenderer.invoke('captions:generate', payload),
+    regroup: (payload) => ipcRenderer.invoke('captions:regroup', payload),
+    listProjects: () => ipcRenderer.invoke('captions:listProjects'),
+    getProject: (id) => ipcRenderer.invoke('captions:getProject', id),
+    saveProject: (payload) => ipcRenderer.invoke('captions:saveProject', payload),
+    deleteProject: (id) => ipcRenderer.invoke('captions:deleteProject', id),
+    detectNativeText: (payload) => ipcRenderer.invoke('captions:detectNativeText', payload),
+    importNativeTemplate: () => ipcRenderer.invoke('captions:importNativeTemplate'),
+    previewNativeText: (payload) => ipcRenderer.invoke('captions:previewNativeText', payload),
+    createNativeText: (payload) => ipcRenderer.invoke('captions:createNativeText', payload),
+    clearNativePreview: () => ipcRenderer.invoke('captions:clearNativePreview')
 });
 
 contextBridge.exposeInMainWorld('roughCutAPI', {
@@ -191,6 +203,19 @@ contextBridge.exposeInMainWorld('variationAPI', {
 
 contextBridge.exposeInMainWorld('debugAPI', {
     createBundle: (options) => ipcRenderer.invoke('debug:createBundle', options)
+});
+
+contextBridge.exposeInMainWorld('analysisAPI', {
+    probeMedia: (payload) => ipcRenderer.invoke('analysis:probeMedia', payload),
+    listReports: () => ipcRenderer.invoke('analysis:listReports'),
+    getReport: (id) => ipcRenderer.invoke('analysis:getReport', id),
+    deleteReport: (id) => ipcRenderer.invoke('analysis:deleteReport', id)
+});
+
+contextBridge.exposeInMainWorld('markerAPI', {
+    normalize: (payload) => ipcRenderer.invoke('markers:normalize', payload),
+    addReviewMarkers: (payload) => ipcRenderer.invoke('markers:addReviewMarkers', payload),
+    exportReport: (payload) => ipcRenderer.invoke('markers:exportReport', payload)
 });
 
 contextBridge.exposeInMainWorld('runtimeQAAPI', {
