@@ -966,6 +966,8 @@ body, #root {
 .manim-health,
 .manim-copy,
 .manim-form,
+.manim-stepper,
+.manim-source-summary,
 .manim-source-panel,
 .manim-starters,
 .manim-suggestions {
@@ -1033,6 +1035,38 @@ body, #root {
     border-color: color-mix(in srgb, var(--warm-300) 45%, var(--line-soft));
 }
 
+.manim-setup-callout {
+    display: grid;
+    gap: var(--size-5);
+    border: var(--size-1) solid color-mix(in srgb, var(--warm-300) 45%, var(--line-soft));
+    border-radius: var(--size-7);
+    background: color-mix(in srgb, var(--warm-300) 10%, var(--bg-sunken));
+    padding: var(--size-9);
+}
+
+.manim-setup-callout strong {
+    color: var(--fg-0);
+    font-size: var(--fs-12);
+}
+
+.manim-setup-callout p {
+    margin: 0;
+    color: var(--fg-3);
+    font-size: var(--fs-11);
+    line-height: 1.35;
+}
+
+.manim-setup-callout code {
+    display: block;
+    border: var(--size-1) solid var(--line-soft);
+    border-radius: var(--size-5);
+    background: var(--bg-sunken);
+    color: var(--cool-100);
+    padding: var(--size-7);
+    font: var(--fs-10p5)/1.35 var(--font-mono);
+    overflow-wrap: anywhere;
+}
+
 .manim-health > div {
     display: grid;
     gap: var(--size-3);
@@ -1083,7 +1117,7 @@ body, #root {
 }
 
 .manim-form textarea {
-    min-height: var(--size-78);
+    min-height: 96px;
     resize: vertical;
     padding: var(--size-8);
 }
@@ -1121,9 +1155,106 @@ body, #root {
     text-transform: none;
 }
 
+.manim-form-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(88px, 0.55fr);
+    gap: var(--size-8);
+    align-items: end;
+}
+
+.manim-primary-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--size-7);
+}
+
+.manim-stepper {
+    gap: var(--size-8);
+}
+
+.manim-stepper p {
+    margin: 0;
+    color: var(--fg-3);
+    font-size: var(--fs-11);
+    line-height: 1.35;
+}
+
+.manim-step {
+    display: grid;
+    grid-template-columns: var(--size-14) minmax(0, 1fr);
+    gap: var(--size-7);
+    align-items: center;
+    color: var(--fg-4);
+}
+
+.manim-step span {
+    width: var(--size-10);
+    height: var(--size-10);
+    border: var(--size-1) solid var(--line-strong);
+    border-radius: 999px;
+    background: var(--bg-sunken);
+}
+
+.manim-step strong {
+    font-size: var(--fs-11);
+    color: inherit;
+}
+
+.manim-step.active {
+    color: var(--fg-0);
+}
+
+.manim-step.active span {
+    border-color: var(--warm-300);
+    background: var(--warm-300);
+    box-shadow: 0 0 0 var(--size-4) color-mix(in srgb, var(--warm-300) 14%, transparent);
+}
+
+.manim-step.done {
+    color: var(--teal-200);
+}
+
+.manim-step.done span {
+    border-color: var(--teal-200);
+    background: var(--teal-200);
+}
+
+.manim-step.failed {
+    color: var(--color-error);
+}
+
+.manim-step.failed span {
+    border-color: var(--color-error);
+    background: var(--color-error);
+}
+
+.manim-source-summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+}
+
+.manim-source-summary > div {
+    display: grid;
+    gap: var(--size-3);
+    min-width: 0;
+}
+
+.manim-source-summary strong {
+    color: var(--fg-0);
+    font-size: var(--fs-12);
+}
+
+.manim-source-summary span {
+    color: var(--fg-3);
+    font: var(--fs-10p5)/1.25 var(--font-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .manim-source-head {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(var(--size-78), auto);
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--size-8);
     align-items: start;
 }
@@ -4120,6 +4251,140 @@ body, #root {
     border-color: var(--warm-border);
     background: var(--warm-bg-soft);
     color: var(--warm-100);
+}
+
+.status-pill.optional,
+.status-pill.unavailable {
+    border-color: var(--line);
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--fg-3);
+}
+
+.status-pill.python-only {
+    border-color: var(--warm-border);
+    background: var(--warm-bg-soft);
+    color: var(--warm-100);
+}
+
+.setup-overview {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--size-10);
+    padding: var(--size-12);
+    border: var(--size-1) solid var(--line-soft);
+    border-radius: var(--size-8);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.setup-overview div {
+    display: grid;
+    gap: var(--size-4);
+    min-width: 0;
+}
+
+.setup-overview strong {
+    color: var(--fg-0);
+    font: var(--fw-700) var(--fs-13)/1.2 var(--font-sans);
+}
+
+.setup-overview span {
+    color: var(--fg-3);
+    font: var(--fs-11)/1.45 var(--font-sans);
+}
+
+.setup-checklist {
+    display: grid;
+    gap: var(--size-7);
+}
+
+.setup-checklist.optional {
+    padding-top: var(--size-8);
+    border-top: var(--size-1) solid var(--line-soft);
+}
+
+.setup-optional-head {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--size-8);
+    color: var(--fg-3);
+    font: var(--fs-9p5)/1 var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: .18em;
+}
+
+.setup-optional-head em {
+    color: var(--fg-4);
+    font-style: normal;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.setup-check-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--size-10);
+    padding: var(--size-10);
+    border: var(--size-1) solid var(--line-soft);
+    border-radius: var(--size-7);
+    background: rgba(0, 0, 0, 0.14);
+}
+
+.setup-check-main {
+    display: grid;
+    gap: var(--size-4);
+    min-width: 0;
+}
+
+.setup-check-main strong {
+    color: var(--fg-0);
+    font: var(--fw-700) var(--fs-12)/1.2 var(--font-sans);
+}
+
+.setup-check-main span {
+    color: var(--fg-3);
+    font: var(--fs-10p5)/1.45 var(--font-sans);
+    overflow-wrap: anywhere;
+}
+
+.setup-check-side {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--size-6);
+    min-width: 0;
+}
+
+.optional-tool-status {
+    display: grid;
+    gap: var(--size-5);
+    padding: var(--size-10);
+    border: var(--size-1) solid var(--line-soft);
+    border-radius: var(--size-7);
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.optional-tool-status span {
+    color: var(--fg-3);
+    font: var(--fs-10p5)/1.35 var(--font-mono);
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 460px) {
+    .setup-overview,
+    .setup-check-item {
+        grid-template-columns: 1fr;
+    }
+
+    .setup-overview {
+        display: grid;
+    }
+
+    .setup-check-side {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
 }
 
 .render-health-card,

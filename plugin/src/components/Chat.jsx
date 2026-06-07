@@ -159,11 +159,11 @@ function RenderMovAction({ parsed, message, config, provider, model, validation,
                             timelineName: result.placed ? 'Current timeline' : '',
                             messageId: message.id
                         });
-                        setOgraphStatus(graph?.id ? 'Ograph saved' : '');
+                        setOgraphStatus(graph?.id ? 'Workflow history saved' : '');
                         window.dispatchEvent(new CustomEvent('resolve-ai:ographs-changed'));
                     }
                 } catch {
-                    setOgraphStatus('Ograph save skipped');
+                    setOgraphStatus('Workflow history skipped');
                 }
                 window.dispatchEvent(new CustomEvent('resolve-ai:renders-changed'));
                 window.dispatchEvent(new CustomEvent('resolve-ai:render-queue-changed'));
@@ -296,12 +296,12 @@ function RenderCard({ message, parsed, config, provider, model, onRegenerate, on
                 timelineName: renderResult?.warning ? '' : renderResult?.success ? 'Current timeline' : '',
                 messageId: message.id
             });
-            setOgraphStatus('Saved to Ograph');
+            setOgraphStatus('Saved to Workflow Graph');
             window.dispatchEvent(new CustomEvent('resolve-ai:ographs-changed'));
             openOgraphGraph(graph?.id);
             setTimeout(() => setOgraphStatus(''), 1800);
         } catch {
-            setOgraphStatus('Ograph save failed');
+            setOgraphStatus('Workflow Graph save failed');
         }
     }
 
@@ -372,7 +372,7 @@ function RenderCard({ message, parsed, config, provider, model, onRegenerate, on
                     {saveStatus || 'Save as Template'}
                 </button>
                 <button className="mini-action primary" onClick={handleSaveOgraph}>
-                    {ographStatus || 'Save to Ograph'}
+                    {ographStatus || 'Save to Workflow Graph'}
                 </button>
                 {REGENERATE_ACTIONS.map(action => (
                     <button
@@ -430,7 +430,7 @@ function AssistantText({ text }) {
                                         className="mini-action primary"
                                         onClick={() => openManimSource(part.content)}
                                     >
-                                        Use in Manim Lab
+                                        Use in Motion Diagram
                                     </button>
                                 )}
                             </div>

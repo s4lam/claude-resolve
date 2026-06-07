@@ -86,12 +86,12 @@ export default function InspectorPanel({
                     className="inspector-flow-step"
                     onClick={() => openTool('create', 'ograph')}
                 >
-                    <strong>Ograph</strong>
-                    <span>{hasLatestGeneration ? 'Capture the latest result as a motion graph.' : 'Open saved graphs and render history capture.'}</span>
+                    <strong>Workflow Graph</strong>
+                    <span>{hasLatestGeneration ? 'Capture the latest result as workflow history.' : 'Open saved provenance and render history.'}</span>
                 </button>
                 <button type="button" className="inspector-flow-step" onClick={() => openTool('create', 'manim')}>
-                    <strong>Manim Lab</strong>
-                    <span>Build or validate Python animation scenes.</span>
+                    <strong>Motion Diagram</strong>
+                    <span>Generate, render, and add local diagram clips.</span>
                 </button>
                 <button type="button" className="inspector-flow-step" onClick={() => openTool('produce', 'timeline')}>
                     <strong>Timeline</strong>

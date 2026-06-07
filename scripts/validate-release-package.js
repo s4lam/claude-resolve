@@ -7,6 +7,8 @@ const packageDir = process.argv[2]
     : path.join(root, 'dist', 'release', 'resolve-ai');
 
 const requiredFiles = [
+    'release-manifest.json',
+    'INSTALL-FIRST.txt',
     'plugin/manifest.xml',
     'plugin/main.js',
     'plugin/preload.js',
@@ -28,11 +30,18 @@ const requiredFiles = [
     'install.bat',
     'install.ps1',
     'install.sh',
-    'install.command'
+    'install.command',
+    'Install Resolve AI.bat',
+    'Install Resolve AI.command'
 ];
 
 function exists(relativePath) {
     return fs.existsSync(path.join(packageDir, relativePath));
+}
+
+function looksLikeGithubSourceZip() {
+    return fs.existsSync(path.join(packageDir, 'plugin', 'package.json'))
+        && !fs.existsSync(path.join(packageDir, 'plugin', 'dist', 'index.html'));
 }
 
 const missing = requiredFiles.filter(file => !exists(file));
@@ -42,6 +51,10 @@ const hasBuiltJs = assets.some(file => /^index-.*\.js$/.test(file));
 const hasBuiltCss = assets.some(file => /^index-.*\.css$/.test(file));
 
 if (missing.length || !hasBuiltJs || !hasBuiltCss) {
+    if (looksLikeGithubSourceZip()) {
+        console.error('This looks like GitHub Source code.zip, not a Resolve AI release ZIP.');
+        console.error('Download ResolveAI-Windows-vX.Y.Z.zip or ResolveAI-macOS-vX.Y.Z.zip from GitHub Releases.');
+    }
     if (missing.length) console.error(`Missing release files:\n${missing.map(file => `- ${file}`).join('\n')}`);
     if (!hasBuiltJs) console.error('Missing built Vite JS asset in plugin/dist/assets.');
     if (!hasBuiltCss) console.error('Missing built Vite CSS asset in plugin/dist/assets.');

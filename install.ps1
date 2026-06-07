@@ -114,6 +114,7 @@ function Fail([string]$msg) {
     Write-Host $ICON_ERR -ForegroundColor Red -NoNewline
     Write-Host "  $msg" -ForegroundColor Red
     Write-Host ''
+    try { Stop-InstallLog } catch {}
     Read-Host '       Press Enter to exit'
     exit 1
 }
@@ -145,10 +146,15 @@ function Show-Success {
 $RepoRoot         = $PSScriptRoot
 $PluginSrc        = Join-Path $RepoRoot 'plugin'
 $RendererSrc      = Join-Path $PluginSrc 'renderer'
+$ConfigDir        = Join-Path $env:APPDATA 'Blackmagic Design\DaVinci Resolve\Claude Resolve'
+$InstallerLog     = Join-Path $ConfigDir 'installer.log'
 # Windows/ProgramData path includes the "Support" segment (the macOS path omits
 # it) — this matches Blackmagic's per-platform layout. Do not "sync" the two.
 $Dest             = Join-Path $env:ProgramData 'Blackmagic Design\DaVinci Resolve\Support\Workflow Integration Plugins\com.clauderesolve.plugin'
-$InstallerVersion = '0.5.0-beta'
+$InstallerVersion = '0.6.1-beta'
+try {
+    $InstallerVersion = (Get-Content -Raw -LiteralPath (Join-Path $PluginSrc 'package.json') | ConvertFrom-Json).version
+} catch { }
 
 # Elevate ONLY the plugin copy: everything else runs as the invoking user so
 # Node/npm-global, the Claude CLI + login, and the Playwright Chromium cache
@@ -164,9 +170,33 @@ function Copy-Plugin {
     $srcLit  = "'" + ($PluginSrc -replace "'", "''") + "'"
     $payload = @"
 `$ErrorActionPreference = 'Stop'
-if (Test-Path -LiteralPath $destLit) { Remove-Item -LiteralPath $destLit -Recurse -Force }
-New-Item -ItemType Directory -Path $destLit -Force | Out-Null
-Copy-Item -Path (Join-Path $srcLit '*') -Destination $destLit -Recurse -Force
+`$dest = $destLit
+`$src = $srcLit
+`$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+`$parent = Split-Path -Parent `$dest
+if ((Test-Path -LiteralPath `$parent) -and -not (Test-Path -LiteralPath `$parent -PathType Container)) {
+    Move-Item -LiteralPath `$parent -Destination "`$parent.blocked.`$stamp" -Force
+}
+New-Item -ItemType Directory -Path `$parent -Force | Out-Null
+`$tempDest = "`$dest.incoming.`$stamp"
+`$backupDest = "`$dest.backup.`$stamp"
+Remove-Item -LiteralPath `$tempDest -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path `$tempDest -Force | Out-Null
+Copy-Item -Path (Join-Path `$src '*') -Destination `$tempDest -Recurse -Force
+foreach (`$rel in @('manifest.xml','main.js','preload.js','dist\index.html','data\builtin-template-packs.json','renderer\render.js','updater\install-update.ps1','updater\install-update.sh')) {
+    if (-not (Test-Path -LiteralPath (Join-Path `$tempDest `$rel))) { throw "Staged plugin missing `$rel" }
+}
+try {
+    if (Test-Path -LiteralPath `$backupDest) { Remove-Item -LiteralPath `$backupDest -Recurse -Force }
+    if (Test-Path -LiteralPath `$dest) { Move-Item -LiteralPath `$dest -Destination `$backupDest -Force }
+    Move-Item -LiteralPath `$tempDest -Destination `$dest -Force
+} catch {
+    Remove-Item -LiteralPath `$tempDest -Recurse -Force -ErrorAction SilentlyContinue
+    if ((-not (Test-Path -LiteralPath `$dest)) -and (Test-Path -LiteralPath `$backupDest)) {
+        Move-Item -LiteralPath `$backupDest -Destination `$dest -Force
+    }
+    throw
+}
 "@
     if (Test-Admin) {
         try { & ([scriptblock]::Create($payload)); return $true } catch { return $false }
@@ -181,6 +211,19 @@ Copy-Item -Path (Join-Path $srcLit '*') -Destination $destLit -Recurse -Force
     }
 }
 
+function Start-InstallLog {
+    try {
+        New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
+        Start-Transcript -Path $InstallerLog -Append | Out-Null
+        Write-Host "       log: $InstallerLog" -ForegroundColor DarkGray
+    } catch { }
+}
+
+function Stop-InstallLog {
+    try { Stop-Transcript | Out-Null } catch { }
+}
+
+Start-InstallLog
 Show-Header
 
 # 1 - DaVinci Resolve
@@ -397,7 +440,7 @@ if (-not (Test-Path $distIndex)) {
     }
     Pop-Location
     if ($buildExit -ne 0 -or -not (Test-Path $distIndex)) {
-        Fail 'Could not build plugin UI. From the repo root run: npm --prefix plugin install; npm --prefix plugin run build; then re-run the installer.'
+        Fail 'Could not build plugin UI. Normal users should download ResolveAI-Windows-vX.Y.Z.zip from GitHub Releases, not Source code.zip. Contributors can run: npm --prefix plugin install; npm --prefix plugin run build; then re-run the installer.'
     }
     Ok 'Plugin UI bundle built.'
 } else {
@@ -461,7 +504,7 @@ Push-Location $PluginSrc
 $renderDepsExit = $LASTEXITCODE
 Pop-Location
 if ($renderDepsExit -ne 0) {
-    Fail 'Render dependency self-test failed. Re-run this installer with internet access, or install FFmpeg manually with winget install Gyan.FFmpeg.'
+    Fail 'Render dependency self-test failed. Re-run this installer with internet access so ffmpeg-static and Playwright can install, or install FFmpeg manually with: winget install Gyan.FFmpeg.'
 }
 Ok 'Render dependencies ready.'
 
@@ -513,5 +556,6 @@ Ok 'All required files present.'
 
 # 9 - Done
 Step 9 'Done'
+Stop-InstallLog
 Show-Success
 Read-Host '       Press Enter to exit'

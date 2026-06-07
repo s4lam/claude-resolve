@@ -7,6 +7,6 @@ cd "$(dirname "$0")" || exit 1
 # run this on double-click. Restore +x on both the launcher and the installer
 # so this run (when started via `bash install.command`) and future double-clicks
 # both work, regardless of how the files arrived.
-chmod +x ./install.command ./install.sh 2>/dev/null || true
+chmod +x ./install.command ./install.sh "./Install Resolve AI.command" 2>/dev/null || true
 
 bash ./install.sh

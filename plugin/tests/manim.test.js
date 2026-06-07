@@ -1,5 +1,6 @@
 const assert = require('assert');
 const {
+  buildManimInstallCommand,
   buildManimPrompt,
   buildRenderArgs,
   detectManim,
@@ -42,6 +43,18 @@ const missing = detectManim({}, () => ({ ok: false, stdout: '', stderr: '', erro
 assert.strictEqual(missing.status, 'missing');
 assert.strictEqual(missing.ready, false);
 assert.ok(missing.suggestions.some(line => line.includes('Python')));
+
+const installCommand = buildManimInstallCommand({
+  python: { installed: true, command: 'python3' }
+});
+assert.strictEqual(installCommand.success, true);
+assert.ok(installCommand.command.includes('-m pip install manim'));
+
+const installWithoutPython = buildManimInstallCommand({
+  python: { installed: false, command: '' }
+});
+assert.strictEqual(installWithoutPython.success, false);
+assert.strictEqual(installWithoutPython.error, 'python-missing');
 
 const probed = probeFirst(['bad', 'good'], ['--version'], command => {
   if (command === 'good') return { ok: true, stdout: 'ok version\n', stderr: '' };

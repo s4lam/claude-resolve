@@ -16,6 +16,7 @@ const MANIM_CANDIDATES = isMac
 const PYTHON_CANDIDATES = isMac
   ? ['/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3', 'python']
   : ['py', 'python', 'python3'];
+const MANIM_INSTALL_PACKAGE = 'manim';
 
 const MANIM_DIR = path.join(CONFIG_DIR, 'manim');
 const MANIM_SCENE_DIR = path.join(MANIM_DIR, 'scenes');
@@ -198,6 +199,49 @@ function detectManim(options = {}, runCommand = defaultRunCommand) {
         }
       : null,
     suggestions
+  };
+}
+
+function shellQuote(value) {
+  return `"${String(value || '').replace(/"/g, '\\"')}"`;
+}
+
+function buildManimInstallCommand(health = detectManim()) {
+  const pythonCommand = health?.python?.installed ? health.python.command : '';
+  if (!pythonCommand) {
+    return {
+      success: false,
+      error: 'python-missing',
+      command: ''
+    };
+  }
+  return {
+    success: true,
+    command: `${shellQuote(pythonCommand)} -m pip install ${MANIM_INSTALL_PACKAGE}`
+  };
+}
+
+function openManimInstallTerminal() {
+  const health = detectManim();
+  const install = buildManimInstallCommand(health);
+  if (!install.success) return install;
+
+  if (isMac) {
+    spawn('osascript', ['-e', `tell application "Terminal" to do script ${JSON.stringify(install.command)}`], {
+      detached: true,
+      stdio: 'ignore'
+    }).unref();
+  } else {
+    spawn('cmd.exe', ['/c', 'start', '""', 'cmd.exe', '/k', install.command], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false
+    }).unref();
+  }
+
+  return {
+    success: true,
+    command: install.command
   };
 }
 
@@ -435,15 +479,18 @@ function setupManimHandlers(ipcMain) {
   ipcMain.handle('manim:buildPrompt', (_event, payload) => buildManimPrompt(payload || {}));
   ipcMain.handle('manim:validateSource', (_event, source) => validateManimSource(source || ''));
   ipcMain.handle('manim:renderScene', (_event, payload) => renderManimScene(payload || {}));
+  ipcMain.handle('manim:openInstallTerminal', () => openManimInstallTerminal());
 }
 
 module.exports = {
+  buildManimInstallCommand,
   buildRenderArgs,
   buildManimPrompt,
   detectManim,
   extractPythonSource,
   firstLine,
   getManimStarterScenes,
+  openManimInstallTerminal,
   probeFirst,
   renderManimScene,
   setupManimHandlers,

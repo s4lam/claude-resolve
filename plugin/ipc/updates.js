@@ -14,8 +14,25 @@ const REQUIRED_PLUGIN_FILES = [
     'manifest.xml',
     'main.js',
     'preload.js',
+    'package.json',
     path.join('dist', 'index.html'),
-    path.join('renderer', 'render.js')
+    path.join('data', 'builtin-template-packs.json'),
+    path.join('renderer', 'render.js'),
+    path.join('renderer', 'package.json'),
+    path.join('renderer', 'package-lock.json'),
+    path.join('scripts', 'check-render-deps.js'),
+    path.join('updater', 'install-update.ps1'),
+    path.join('updater', 'install-update.sh')
+];
+const REQUIRED_RELEASE_FILES = [
+    'release-manifest.json',
+    'INSTALL-FIRST.txt',
+    'install.bat',
+    'install.ps1',
+    'install.sh',
+    'install.command',
+    'Install Resolve AI.bat',
+    'Install Resolve AI.command'
 ];
 const UPDATE_STATES = {
     IDLE: 'idle',
@@ -37,6 +54,11 @@ let updateStatus = {
     downloadedBytes: 0,
     totalBytes: 0,
     stageDir: null,
+    zipPath: null,
+    planPath: null,
+    destination: null,
+    backup: null,
+    validation: null,
     error: null,
     instruction: null
 };
@@ -334,11 +356,18 @@ function findStagedRoot(extractDir) {
 
 function validateStagedUpdate(stagedRoot, currentVersion = CURRENT_VERSION) {
     const pluginDir = path.join(stagedRoot, 'plugin');
-    const missing = REQUIRED_PLUGIN_FILES
+    const missingReleaseFiles = REQUIRED_RELEASE_FILES
+        .filter(file => !fs.existsSync(path.join(stagedRoot, file)));
+    const missingPluginFiles = REQUIRED_PLUGIN_FILES
         .map(file => path.join('plugin', file))
         .filter(file => !fs.existsSync(path.join(stagedRoot, file)));
+    const missing = [...missingReleaseFiles, ...missingPluginFiles];
     if (missing.length > 0) {
-        return { ok: false, error: 'missing: ' + missing.join(', ') };
+        return {
+            ok: false,
+            error: 'missing: ' + missing.join(', '),
+            missing
+        };
     }
 
     const packagePath = path.join(pluginDir, 'package.json');
@@ -352,7 +381,16 @@ function validateStagedUpdate(stagedRoot, currentVersion = CURRENT_VERSION) {
         if (!isNewer(pkg.version, currentVersion)) {
             return { ok: false, error: `version ${pkg.version} is not newer than ${currentVersion}` };
         }
-        return { ok: true, version: pkg.version, pluginDir };
+        return {
+            ok: true,
+            version: pkg.version,
+            pluginDir,
+            missing: [],
+            required: {
+                release: REQUIRED_RELEASE_FILES,
+                plugin: REQUIRED_PLUGIN_FILES
+            }
+        };
     } catch {
         return { ok: false, error: 'bad plugin/package.json' };
     }
@@ -571,6 +609,11 @@ async function handleDownloadUpdate(_event, opts = {}) {
             pluginSource: plan.pluginSource,
             destination: plan.destination,
             backup: plan.backup,
+            validation: {
+                ok: true,
+                version: validation.version,
+                required: validation.required
+            },
             error: null,
             instruction: 'Ready to install. Resolve AI will close, but DaVinci Resolve can stay open.'
         });
@@ -619,8 +662,13 @@ function setupUpdateHandlers(ipcMain, mainWindow) {
     ipcMain.handle('app:getUpdateStatus', () => ({ ...updateStatus }));
 }
 
+function getUpdateStatus() {
+    return { ...updateStatus };
+}
+
 module.exports = {
     setupUpdateHandlers,
+    getUpdateStatus,
     parseVersion,
     normalizeVersion,
     isNewer,
@@ -631,5 +679,6 @@ module.exports = {
     installDestinationForPlatform,
     validateStagedUpdate,
     findStagedRoot,
-    REQUIRED_PLUGIN_FILES
+    REQUIRED_PLUGIN_FILES,
+    REQUIRED_RELEASE_FILES
 };

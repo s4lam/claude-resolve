@@ -1,9 +1,22 @@
 # Resolve AI v0.6.1-beta
 
-Patch release focused on making Manim renders easier to understand and test from the plugin.
+Patch release focused on easier installs, safer updates, and clearer local render feedback.
 
 ## What's Changed
 
+- Release ZIPs now include validation metadata and a first-install note that points users to the correct release assets instead of GitHub source ZIPs.
+- Windows and macOS releases include friendly one-click launchers:
+  - `Install Resolve AI.bat`
+  - `Install Resolve AI.command`
+- Release packaging now extracts and validates each ZIP before publish, including:
+  - `plugin/dist/index.html`;
+  - `plugin/data/builtin-template-packs.json`;
+  - renderer dependency setup files;
+  - updater helper scripts;
+  - installer launchers.
+- Installers now copy atomically through a temporary folder, back up old plugin installs, and recover more cleanly when the plugin destination exists as a file.
+- Installer and updater logs are now written under the existing Resolve AI config path for easier support.
+- In-app update diagnostics now include staged ZIP path, validation result, destination, backup path, and last update state.
 - Clarified **Manim Lab** render destination before the user renders.
 - Manim Lab now explains that rendered MP4 files are saved to **Resolve AI Render History**.
 - Successful Manim renders now show:
@@ -39,6 +52,11 @@ Upload these release ZIPs to GitHub Releases:
 
 Use the uploaded `ResolveAI-...zip` files, not GitHub's automatic source-code ZIP.
 
+Inside the ZIP, run:
+
+- Windows: `Install Resolve AI.bat`
+- macOS: `Install Resolve AI.command`
+
 ## Testing
 
 Validated before release:
@@ -47,11 +65,13 @@ Validated before release:
 - `npm --prefix plugin run build`
 - `npm --prefix plugin run smoke`
 - `npm --prefix plugin run smoke:visual`
+- `npm --prefix plugin run package:release`
 - `git diff --check`
 
 ## Known Limits
 
 - DaVinci Resolve Studio is required for Workflow Integration plugins.
+- macOS release ZIPs are best built on macOS so `.command` executable bits are preserved. If double-click is blocked, run `bash install.command` once from Terminal.
 - Native Resolve IntelliScript is only used if a public callable API is detected at runtime.
 - AI Clip Finder requires timestamped SRT/VTT/TXT input for frame-accurate timeline creation.
 - Native Text+ captions require `fuscript` and the expected caption template.

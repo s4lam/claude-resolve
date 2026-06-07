@@ -40,6 +40,17 @@ if [ "$(id -u)" -ne 0 ]; then
   exec sudo "$0" --source "$SOURCE" --destination "$DESTINATION" --backup "$BACKUP" --parent-pid "$PARENT_PID"
 fi
 
+if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+  USER_HOME="$(eval echo "~$SUDO_USER")"
+else
+  USER_HOME="$HOME"
+fi
+CONFIG_DIR="$USER_HOME/Library/Application Support/Blackmagic Design/DaVinci Resolve/Claude Resolve"
+UPDATE_LOG="$CONFIG_DIR/update-installer.log"
+mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+touch "$UPDATE_LOG" 2>/dev/null || true
+exec > >(tee -a "$UPDATE_LOG") 2>&1
+
 echo "Resolve AI updater"
 echo "Waiting for plugin window to close..."
 
@@ -61,8 +72,15 @@ require_file "$SOURCE/manifest.xml"
 require_file "$SOURCE/main.js"
 require_file "$SOURCE/preload.js"
 require_file "$SOURCE/dist/index.html"
+require_file "$SOURCE/data/builtin-template-packs.json"
 require_file "$SOURCE/renderer/render.js"
+require_file "$SOURCE/scripts/check-render-deps.js"
+require_file "$SOURCE/updater/install-update.ps1"
+require_file "$SOURCE/updater/install-update.sh"
 
+if [ -e "$PARENT_DIR" ] && [ ! -d "$PARENT_DIR" ]; then
+  mv "$PARENT_DIR" "${PARENT_DIR}.blocked.$(date +%Y%m%d-%H%M%S)"
+fi
 mkdir -p "$PARENT_DIR"
 rm -rf "$TEMP_DEST"
 

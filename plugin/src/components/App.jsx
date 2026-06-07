@@ -78,6 +78,17 @@ function latestAssistantTextContext(messages = []) {
     return '';
 }
 
+function extractManimSourceFromText(text = '') {
+    const value = String(text || '').trim();
+    if (!value) return '';
+    const pythonBlock = value.match(/```python\s*([\s\S]*?)```/i);
+    const genericBlock = value.match(/```\s*([\s\S]*?)```/i);
+    const candidate = (pythonBlock?.[1] || genericBlock?.[1] || value).trim();
+    if (!/class\s+ResolveAIManimScene\s*\(/.test(candidate)) return '';
+    if (!/(from\s+manim\s+import|import\s+manim)/.test(candidate)) return '';
+    return candidate;
+}
+
 function buildSessionContinuationPrompt(promptText, session, messages = []) {
     const recentTurns = messages
         .filter(message => !message.isThinking && message.text)
@@ -155,6 +166,7 @@ export default function App() {
     const [updateAvailable, setUpdateAvailable] = useState(false);
     const [draftPrompt, setDraftPrompt] = useState({ text: '', revision: 0 });
     const [manimSourceDraft, setManimSourceDraft] = useState(null);
+    const [pendingManimJob, setPendingManimJob] = useState(null);
     const nextId = useRef(0);
     const nextDraftRevision = useRef(1);
     const messagesRef = useRef([]);
@@ -256,11 +268,61 @@ export default function App() {
     }, [messages]);
 
     useEffect(() => {
+        if (!pendingManimJob?.assistantId) return;
+        const message = messages.find(item => item.id === pendingManimJob.assistantId);
+        if (!message || message.isThinking) return;
+        const source = extractManimSourceFromText(message.text);
+        const draft = source
+            ? {
+                source,
+                idea: pendingManimJob.idea || 'Generated motion diagram',
+                title: pendingManimJob.title || 'Generated Motion Diagram',
+                origin: 'chat',
+                autoRender: Boolean(pendingManimJob.autoRender),
+                autoAddToTimeline: Boolean(pendingManimJob.autoAddToTimeline),
+                quality: pendingManimJob.quality || 'low',
+                jobId: pendingManimJob.id,
+                revision: Date.now()
+            }
+            : {
+                source: '',
+                idea: pendingManimJob.idea || 'Generated motion diagram',
+                title: 'Motion Diagram source missing',
+                origin: 'chat',
+                error: 'The assistant finished without a valid ResolveAIManimScene Python source block.',
+                autoRender: false,
+                autoAddToTimeline: false,
+                quality: pendingManimJob.quality || 'low',
+                jobId: pendingManimJob.id,
+                revision: Date.now()
+            };
+        openManimDraft(draft);
+        setPendingManimJob(null);
+    }, [messages, pendingManimJob]);
+
+    function openManimDraft(draft) {
+        setManimSourceDraft(draft);
+        setSidebar({ open: true, view: 'tools' });
+        resizeForSidebar(true);
+        setConfig(prev => ({
+            ...prev,
+            ui: {
+                ...(prev.ui || {}),
+                activeWorkspaceMode: 'create',
+                activeToolTab: 'manim'
+            }
+        }));
+        window.configAPI?.set?.({ ui: { activeWorkspaceMode: 'create', activeToolTab: 'manim' } })
+            .then(updated => { if (updated) setConfig(updated); })
+            .catch(() => {});
+    }
+
+    useEffect(() => {
         function handleOpenManimSource(event) {
             const detail = event.detail || {};
             const source = String(detail.source || '').trim();
             if (!source) return;
-            setManimSourceDraft({
+            openManimDraft({
                 source,
                 idea: detail.idea || 'Assistant Manim source',
                 title: detail.title || 'Assistant Manim Source',
@@ -268,19 +330,6 @@ export default function App() {
                 graphId: detail.graphId || '',
                 revision: Date.now()
             });
-            setSidebar({ open: true, view: 'tools' });
-            resizeForSidebar(true);
-            setConfig(prev => ({
-                ...prev,
-                ui: {
-                    ...(prev.ui || {}),
-                    activeWorkspaceMode: 'create',
-                    activeToolTab: 'manim'
-                }
-            }));
-            window.configAPI?.set?.({ ui: { activeWorkspaceMode: 'create', activeToolTab: 'manim' } })
-                .then(updated => { if (updated) setConfig(updated); })
-                .catch(() => {});
         }
         window.addEventListener('resolve-ai:open-manim-source', handleOpenManimSource);
         return () => window.removeEventListener('resolve-ai:open-manim-source', handleOpenManimSource);
@@ -516,6 +565,13 @@ export default function App() {
         setActiveTool(null);
         setActiveProvider(null);
         setTokenCount(0);
+        if (options.manimJob) {
+            setPendingManimJob({
+                ...options.manimJob,
+                id: options.manimJob.id || `manim-${assistantId}-${Date.now()}`,
+                assistantId
+            });
+        }
         (window.agentAPI || window.claudeAPI).sendPrompt(agentPrompt);
         return true;
     }

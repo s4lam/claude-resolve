@@ -8,6 +8,8 @@ const {
     installDestinationForPlatform,
     isNewer,
     isTrustedReleaseAssetUrl,
+    REQUIRED_PLUGIN_FILES,
+    REQUIRED_RELEASE_FILES,
     selectReleaseAsset,
     updateRootForPlatform,
     validateStagedUpdate
@@ -51,15 +53,15 @@ assert(installDestinationForPlatform('darwin').includes('Workflow Integration Pl
 assert(installDestinationForPlatform('darwin').endsWith('com.clauderesolve.plugin'));
 
 function writeRequiredPlugin(root, version = '0.5.1-beta', skip = null) {
-    const files = [
-        'manifest.xml',
-        'main.js',
-        'preload.js',
-        path.join('dist', 'index.html'),
-        path.join('renderer', 'render.js')
-    ];
-    for (const rel of files) {
+    for (const rel of REQUIRED_RELEASE_FILES) {
         if (rel === skip) continue;
+        const target = path.join(root, rel);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, rel.endsWith('.json') ? '{}' : 'ok', 'utf8');
+    }
+    for (const rel of REQUIRED_PLUGIN_FILES) {
+        if (path.join('plugin', rel) === skip || rel === skip) continue;
+        if (rel === 'package.json') continue;
         const target = path.join(root, 'plugin', rel);
         fs.mkdirSync(path.dirname(target), { recursive: true });
         fs.writeFileSync(target, 'ok', 'utf8');

@@ -15,9 +15,18 @@ PLUGIN_SRC="$REPO_ROOT/plugin"
 RENDERER_SRC="$PLUGIN_SRC/renderer"
 DEST_PARENT="/Library/Application Support/Blackmagic Design/DaVinci Resolve/Workflow Integration Plugins"
 DEST="$DEST_PARENT/com.clauderesolve.plugin"
+CONFIG_DIR="$HOME/Library/Application Support/Blackmagic Design/DaVinci Resolve/Claude Resolve"
+INSTALLER_LOG="$CONFIG_DIR/installer.log"
 # macOS plugins dir intentionally OMITS the "Support/" segment that the
 # Windows/ProgramData path includes — this matches Blackmagic's macOS layout.
-INSTALLER_VERSION='0.5.0-beta'
+INSTALLER_VERSION='0.6.1-beta'
+if [ -f "$PLUGIN_SRC/package.json" ]; then
+    detected_version="$(node -e "try{console.log(require(process.argv[1]).version||'')}catch(e){}" "$PLUGIN_SRC/package.json" 2>/dev/null || true)"
+    [ -n "$detected_version" ] && INSTALLER_VERSION="$detected_version"
+fi
+mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+touch "$INSTALLER_LOG" 2>/dev/null || true
+exec > >(tee -a "$INSTALLER_LOG") 2>&1
 
 # ---------------------------------------------------------------- colours
 ESC=$(printf '\033')
@@ -266,7 +275,7 @@ ok 'Renderer dependencies installed.'
 if [ ! -f "$PLUGIN_SRC/dist/index.html" ]; then
     warn 'Plugin UI bundle missing - building plugin/dist...'
     if ! ( cd "$PLUGIN_SRC" && npm install --no-audit --no-fund && npm run build ); then
-        fail 'Could not build plugin UI. From the repo root run: npm --prefix plugin install && npm --prefix plugin run build, then re-run the installer.'
+        fail 'Could not build plugin UI. Normal users should download ResolveAI-macOS-vX.Y.Z.zip from GitHub Releases, not Source code.zip. Contributors can run: npm --prefix plugin install && npm --prefix plugin run build, then re-run the installer.'
     fi
     ok 'Plugin UI bundle built.'
 else
@@ -335,7 +344,7 @@ if [ ! -f "$render_deps_check" ]; then
     fail 'Render dependency self-test is missing from plugin/scripts.'
 fi
 if ! ( cd "$PLUGIN_SRC" && node "$render_deps_check" ); then
-    fail 'Render dependency self-test failed. Re-run this installer with internet access, or install FFmpeg manually with brew install ffmpeg.'
+    fail 'Render dependency self-test failed. Re-run this installer with internet access so ffmpeg-static and Playwright can install, or install FFmpeg manually with: brew install ffmpeg.'
 fi
 ok 'Render dependencies ready.'
 
@@ -349,22 +358,46 @@ if ! sudo mkdir -p "$DEST_PARENT"; then
     fail "Could not create plugin parent folder: $DEST_PARENT"
 fi
 
+stamp="$(date +%Y%m%d%H%M%S)"
+temp_dest="${DEST}.incoming.${stamp}"
+backup_dest="${DEST}.backup.${stamp}"
+sudo rm -rf "$temp_dest" 2>/dev/null || true
+
+if ! sudo mkdir -p "$temp_dest"; then
+    fail "Could not create temporary plugin folder: $temp_dest"
+fi
+
+if ! sudo ditto "$PLUGIN_SRC" "$temp_dest"; then
+    sudo rm -rf "$temp_dest" 2>/dev/null || true
+    fail 'Install failed: could not stage plugin files before install.'
+fi
+
+for rel in manifest.xml main.js preload.js dist/index.html data/builtin-template-packs.json renderer/render.js updater/install-update.ps1 updater/install-update.sh; do
+    if [ ! -e "$temp_dest/$rel" ]; then
+        sudo rm -rf "$temp_dest" 2>/dev/null || true
+        fail "Staged plugin missing: $rel"
+    fi
+done
+
+if [ -e "$backup_dest" ] || [ -L "$backup_dest" ]; then
+    sudo rm -rf "$backup_dest"
+fi
+
 if [ -e "$DEST" ] || [ -L "$DEST" ]; then
-    if ! sudo rm -rf "$DEST"; then
-        repair_blocking_path "$DEST" 'Existing Resolve AI plugin path'
+    warn 'Backing up existing plugin before install.'
+    if ! sudo mv "$DEST" "$backup_dest"; then
+        sudo rm -rf "$temp_dest" 2>/dev/null || true
+        fail "Could not back up existing plugin path: $DEST"
     fi
 fi
 
-if [ -e "$DEST" ] || [ -L "$DEST" ]; then
-    fail "Could not remove old plugin path: $DEST"
-fi
-
-if ! sudo mkdir -p "$DEST"; then
-    fail "Could not create plugin folder: $DEST"
-fi
-
-if ! sudo ditto "$PLUGIN_SRC" "$DEST"; then
-    fail 'Install failed (step 7d): could not copy the plugin files into the destination.'
+if ! sudo mv "$temp_dest" "$DEST"; then
+    warn 'Install move failed; restoring previous plugin if available.'
+    sudo rm -rf "$temp_dest" 2>/dev/null || true
+    if [ ! -e "$DEST" ] && [ -e "$backup_dest" ]; then
+        sudo mv "$backup_dest" "$DEST" 2>/dev/null || true
+    fi
+    fail 'Install failed: could not move staged plugin into place.'
 fi
 ok "Installed to $DEST"
 

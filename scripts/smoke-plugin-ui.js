@@ -29,7 +29,7 @@ for (const file of requiredFiles) {
 }
 
 const sidebar = fs.readFileSync(path.join(root, 'plugin/src/components/Sidebar.jsx'), 'utf8');
-for (const tab of ['Sessions', 'Create', 'Timeline', 'Clip Finder', 'Rough Cut', 'Assets', 'Ograph', 'Manim Lab', 'Variations', 'Captions', 'Gallery', 'Templates', 'Renders']) {
+for (const tab of ['Sessions', 'Create', 'Timeline', 'Clip Finder', 'Rough Cut', 'Assets', 'Workflow Graph', 'Motion Diagram', 'Variations', 'Captions', 'Gallery', 'Templates', 'Renders']) {
     if (!sidebar.includes(tab)) throw new Error(`Missing tool tab ${tab}`);
 }
 for (const mode of ['create', 'produce', 'discover']) {
@@ -42,7 +42,7 @@ for (const label of ['Create', 'Produce', 'Discover', 'Tools', 'Settings']) {
 }
 
 const inspector = fs.readFileSync(path.join(root, 'plugin/src/components/InspectorPanel.jsx'), 'utf8');
-for (const label of ['Ograph', 'Manim', 'Generation', 'Output']) {
+for (const label of ['Workflow Graph', 'Motion Diagram', 'Generation', 'Output']) {
     if (!inspector.includes(label)) throw new Error(`Missing inspector label ${label}`);
 }
 

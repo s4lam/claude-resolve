@@ -124,7 +124,8 @@ contextBridge.exposeInMainWorld('manimAPI', {
     getStarterScenes: () => ipcRenderer.invoke('manim:getStarterScenes'),
     buildPrompt: (payload) => ipcRenderer.invoke('manim:buildPrompt', payload),
     validateSource: (source) => ipcRenderer.invoke('manim:validateSource', source),
-    renderScene: (payload) => ipcRenderer.invoke('manim:renderScene', payload)
+    renderScene: (payload) => ipcRenderer.invoke('manim:renderScene', payload),
+    openInstallTerminal: () => ipcRenderer.invoke('manim:openInstallTerminal')
 });
 
 contextBridge.exposeInMainWorld('assetAPI', {

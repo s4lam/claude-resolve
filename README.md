@@ -56,12 +56,14 @@ Resolve AI uses CLI auth. It does not ask for or store OpenAI or Anthropic API k
    - macOS: `ResolveAI-macOS-vX.Y.Z.zip`
 2. Extract the ZIP.
 3. Run the installer:
-   - Windows: double-click `install.bat`
-   - macOS: double-click `install.command`
-4. Restart DaVinci Resolve.
+   - Windows: double-click `Install Resolve AI.bat`
+   - macOS: double-click `Install Resolve AI.command`
+4. Restart DaVinci Resolve for first install, or reopen the plugin after an in-app update.
 5. Open **Workspace > Workflow Integration > Resolve AI**.
 
-Use release ZIPs for normal installs. Source installs are mainly for contributors.
+Download the ZIP asset from the GitHub Release page, not GitHub's automatic **Source code** ZIP. Source ZIPs do not include the built `plugin/dist` files and will fail installer verification.
+
+The installer preserves existing settings, renders, assets, sessions, templates, and legacy `com.clauderesolve.plugin` compatibility paths.
 
 ### Install From Source
 
@@ -86,9 +88,19 @@ If macOS Gatekeeper blocks a downloaded source folder:
 
 ```bash
 xattr -dr com.apple.quarantine .
-chmod +x install.command install.sh
+chmod +x "Install Resolve AI.command" install.command install.sh
 bash install.command
 ```
+
+Source installs are mainly for contributors. Normal users should use the release ZIP.
+
+## Updating
+
+Open **Settings > App** and click **Update Resolve AI**.
+
+The updater downloads the correct release ZIP, validates it, stages it locally, closes only the Resolve AI plugin window, installs the new plugin files, and asks you to reopen **Workspace > Workflow Integration > Resolve AI**. DaVinci Resolve itself can stay open, but the plugin window must close during file replacement.
+
+If an update fails, Resolve AI keeps the old plugin backup and Settings > App provides **Copy update diagnostics** for bug reports.
 
 ## Provider Setup
 
@@ -105,6 +117,13 @@ claude login
 ```
 
 Inside Resolve AI, open **Settings > Provider** and choose `Auto`, `Codex`, or `Claude`.
+
+On first run, open **Settings > Setup**. It separates required core checks from optional tools:
+
+- required: AI provider login, render engine, updater status;
+- optional: Motion Diagram / Manim and local transcription.
+
+Missing optional tools do not mean the plugin is broken.
 
 ## Main Workflows
 
@@ -253,17 +272,22 @@ If a capability is unavailable, Resolve AI shows the fallback instead of failing
 
 ## Troubleshooting
 
-- **Installer says `missing: dist/index.html`**: use a release ZIP or run `npm --prefix plugin run build`, then rerun the installer.
-- **Installer says `missing: data/builtin-template-packs.json`**: download the latest release ZIP and rerun the installer.
-- **macOS says unidentified developer**: right-click `install.command`, choose **Open**, then confirm.
-- **macOS says plugin path is not a directory**: remove the old bad file at the plugin install path, then rerun the latest installer.
+- **Installer says `missing: dist/index.html`**: you probably downloaded GitHub's **Source code** ZIP. Download `ResolveAI-Windows-vX.Y.Z.zip` or `ResolveAI-macOS-vX.Y.Z.zip` from the Release assets.
+- **Installer says `missing: data/builtin-template-packs.json`**: download the latest release ZIP asset, not Source code, then rerun the installer.
+- **macOS says unidentified developer**: right-click `Install Resolve AI.command`, choose **Open**, then confirm.
+- **macOS double-click does not open**: run `bash install.command` from Terminal once. The launcher will repair executable bits for future runs.
+- **Plugin path is not a directory**: rerun the latest installer. It backs up the bad file/path automatically before copying the plugin.
+- **Permission denied on macOS**: the installer uses `sudo` only for the `/Library/Application Support/Blackmagic Design/...` plugin folder. Rerun the installer from an extracted folder, not directly inside the ZIP preview.
 - **Render fails with FFmpeg errors**: open Settings > Diagnostics and run the render engine check. Source installs can run `npm --prefix plugin run render-deps:check`.
+- **Not sure what is missing**: open Settings > Setup. It shows required items separately from optional Manim/Whisper tools.
 - **Need system FFmpeg fallback**: macOS `brew install ffmpeg`; Windows `winget install Gyan.FFmpeg`.
 - **Render does nothing on macOS**: update to the latest release and use Settings > Diagnostics. Render failures should now show visible errors.
+- **Update failed**: open Settings > App and use **Copy update diagnostics**. The old plugin is restored from backup when install replacement fails.
 - **Codex or Claude login fails**: run `codex login` or `claude login` in Terminal, then reopen Resolve AI.
 - **Codex shows noisy skill/config warnings**: those are filtered from chat where possible. Fix invalid local Codex skills/config if they block the CLI.
 - **Ograph is empty**: generate an overlay and click **Save to Ograph**, or open Ograph and click **Capture latest result**.
 - **Manim Lab says setup needed**: install Python 3.11+ and Manim Community Edition with `python -m pip install manim`, then click **Retry**.
+- **Motion Diagram / Manim is optional**: use Settings > Setup or Settings > Optional Tools to open a visible Manim install terminal. Resolve AI does not silently install Python packages.
 - **AI Clip Finder cannot create timelines**: select exactly one Media Pool video clip and import a timestamped transcript. Untimestamped TXT cannot create frame-accurate cuts.
 - **Whisper is not ready**: install Whisper or whisper.cpp, then configure the command/model path in Settings. SRT/VTT import still works without Whisper.
 - **Short subtitles look too wide**: use the Shorts Studio **Caption this** flow rather than a generic caption prompt. It uses 1080x1920 and vertical safe-area rules.
@@ -288,6 +312,8 @@ Package release ZIPs:
 npm --prefix plugin run validate:release
 npm --prefix plugin run package:release
 ```
+
+`package:release` validates each ZIP after extraction and fails if required files such as `plugin/dist/index.html`, `plugin/data/builtin-template-packs.json`, or updater helper scripts are missing.
 
 Regenerate README GIFs:
 

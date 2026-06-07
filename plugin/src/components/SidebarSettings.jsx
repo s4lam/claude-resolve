@@ -6,7 +6,11 @@ const STATUS_LABELS = {
     'not-logged-in': 'Login needed',
     'not-installed': 'Not installed',
     checking: 'Checking',
-    unknown: 'Unknown'
+    unknown: 'Unknown',
+    optional: 'Optional',
+    unavailable: 'Unavailable',
+    'needs-attention': 'Needs setup',
+    'python-only': 'Install Manim'
 };
 
 const RENDER_PRESETS = {
@@ -175,6 +179,23 @@ function ProviderHealthCard({ id, label, status, onLogin }) {
     );
 }
 
+function SetupChecklistItem({ title, description, state, actionLabel, onAction }) {
+    return (
+        <div className="setup-check-item">
+            <div className="setup-check-main">
+                <strong>{title}</strong>
+                <span>{description}</span>
+            </div>
+            <div className="setup-check-side">
+                <StatusPill state={state} />
+                {actionLabel && onAction && (
+                    <button className="settings-small-btn" onClick={onAction}>{actionLabel}</button>
+                )}
+            </div>
+        </div>
+    );
+}
+
 export default function SidebarSettings({ config, onConfigChange, onShowTools, onClose }) {
     const [update, setUpdate] = useState(null);
     const [updateStatus, setUpdateStatus] = useState(null);
@@ -192,9 +213,13 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
     const [timelineStatus, setTimelineStatus] = useState('');
     const [debugStatus, setDebugStatus] = useState('');
     const [renderDiagStatus, setRenderDiagStatus] = useState('');
+    const [updateDiagStatus, setUpdateDiagStatus] = useState('');
+    const [setupStatus, setSetupStatus] = useState('');
     const [safetyStatus, setSafetyStatus] = useState('');
     const [runtimeQA, setRuntimeQA] = useState(null);
     const [runtimeQAStatus, setRuntimeQAStatus] = useState('');
+    const [manimHealth, setManimHealth] = useState(null);
+    const [transcriberState, setTranscriberState] = useState(null);
 
     useEffect(() => {
         runCheck(false);
@@ -271,6 +296,29 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
         return <button className="settings-small-btn" onClick={() => runCheck(true)}>{update ? 'Up to date' : 'Check'}</button>;
     }
 
+    async function handleCopyUpdateDiagnostics() {
+        const latestStatus = await window.updatesAPI?.getStatus?.().catch(() => updateStatus);
+        const payload = {
+            current: update?.current || latestStatus?.current || versionText,
+            latest: update?.latest || latestStatus?.latest || null,
+            hasUpdate: Boolean(update?.hasUpdate || latestStatus?.hasUpdate),
+            platform: update?.platform || null,
+            assetName: update?.assetName || latestStatus?.assetName || null,
+            state: latestStatus?.state || updateStatus?.state || 'idle',
+            stageDir: latestStatus?.stageDir || null,
+            zipPath: latestStatus?.zipPath || null,
+            planPath: latestStatus?.planPath || null,
+            destination: latestStatus?.destination || null,
+            backup: latestStatus?.backup || null,
+            validation: latestStatus?.validation || null,
+            error: latestStatus?.error || update?.error || null,
+            instruction: latestStatus?.instruction || null
+        };
+        await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+        setUpdateDiagStatus('Copied');
+        setTimeout(() => setUpdateDiagStatus(''), 2200);
+    }
+
     async function refreshHealth() {
         const read = result => result.status === 'fulfilled' ? result.value : null;
         const [
@@ -279,14 +327,18 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
             nextRenderHealth,
             nextRenderError,
             nextCapability,
-            nextAnalysisReports
+            nextAnalysisReports,
+            nextManimHealth,
+            nextTranscribers
         ] = await Promise.allSettled([
             window.agentAPI?.health?.(),
             window.agentAPI?.getLogs?.({ includeHidden: true }),
             window.overlayAPI?.getRenderHealth?.(),
             window.overlayAPI?.getLastRenderError?.(),
             window.resolveAPI?.capabilityReport?.(),
-            window.analysisAPI?.listReports?.()
+            window.analysisAPI?.listReports?.(),
+            window.manimAPI?.detect?.(),
+            window.shortsAPI?.detectTranscribers?.()
         ]);
         const providerLogs = read(nextLogs);
         const reports = read(nextAnalysisReports);
@@ -296,6 +348,65 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
         setCapabilityReport(read(nextCapability) || null);
         setAnalysisReports(Array.isArray(reports) ? reports : []);
         setLastRenderError(read(nextRenderError) || null);
+        setManimHealth(read(nextManimHealth) || null);
+        setTranscriberState(read(nextTranscribers) || null);
+    }
+
+    async function handleOpenProviderLogin() {
+        setSetupStatus('Opening login');
+        try {
+            await window.agentAPI?.openLoginTerminal?.();
+            setSetupStatus('Login terminal opened');
+        } catch {
+            setSetupStatus('Login failed');
+        }
+        setTimeout(() => setSetupStatus(''), 2400);
+    }
+
+    async function handleRepairRenderDeps() {
+        setSetupStatus('Repairing render');
+        try {
+            const result = await window.overlayAPI?.repairRenderDeps?.();
+            await refreshHealth();
+            setSetupStatus(result?.success || result?.ready ? 'Render ready' : 'Check diagnostics');
+        } catch {
+            setSetupStatus('Repair failed');
+        }
+        setTimeout(() => setSetupStatus(''), 2600);
+    }
+
+    async function handleOpenManimInstall() {
+        setSetupStatus('Opening installer');
+        try {
+            const result = await window.manimAPI?.openInstallTerminal?.();
+            if (result?.success) {
+                setSetupStatus('Terminal opened');
+            } else {
+                await window.windowAPI?.openExternal?.('https://www.python.org/downloads/');
+                setSetupStatus('Install Python first');
+            }
+        } catch {
+            setSetupStatus('Unavailable');
+        }
+        setTimeout(() => setSetupStatus(''), 2600);
+    }
+
+    async function handleCopySetupDiagnostics() {
+        setSetupStatus('Copying');
+        try {
+            await navigator.clipboard.writeText(JSON.stringify({
+                version: versionText,
+                provider: health,
+                render: renderHealth,
+                manim: manimHealth,
+                transcription: transcriberState,
+                update: updateStatus || update
+            }, null, 2));
+            setSetupStatus('Copied');
+        } catch {
+            setSetupStatus('Copy failed');
+        }
+        setTimeout(() => setSetupStatus(''), 2400);
     }
 
     async function handleRuntimeQA() {
@@ -422,6 +533,15 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
         });
     }
 
+    function updateTranscriptionSetting(patch) {
+        onConfigChange({
+            transcription: {
+                ...(config.transcription || {}),
+                ...patch
+            }
+        });
+    }
+
     const provider = config.provider || 'auto';
     const claudeModelValue = SELECTORS.models.some(m => m.value === config.model) ? config.model : 'sonnet';
     const modelValue = provider === 'codex' ? (config.codexModel || 'default') : claudeModelValue;
@@ -447,6 +567,84 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
         ? 'ProRes 4444 XQ'
         : renderPreset.codec;
     const updateProgress = updateProgressPercent(updateStatus);
+    const transcriptionSettings = {
+        provider: 'none',
+        commandPath: '',
+        model: 'base',
+        language: '',
+        ...(config.transcription || {})
+    };
+    const providerStatuses = health?.providers || {};
+    const providerReady = providerStatuses.claude?.status === 'ready' || providerStatuses.codex?.status === 'ready';
+    const providerInstalled = providerStatuses.claude?.installed || providerStatuses.codex?.installed;
+    const providerSetupState = providerReady ? 'ready' : providerInstalled ? 'not-logged-in' : 'not-installed';
+    const providerSetupText = providerReady
+        ? `${health?.activeProvider || activeProvider} / ${health?.activeModel || activeModel}`
+        : providerInstalled ? 'Open a CLI login terminal for Claude or Codex.' : 'Install Codex CLI or Claude Code CLI, then log in.';
+    const renderSetupState = renderHealth?.ready ? 'ready' : renderHealth ? 'needs-attention' : 'checking';
+    const renderSetupText = renderHealth?.ready
+        ? 'FFmpeg, Playwright, encoders, and render folder are ready.'
+        : renderHealth?.summary?.failures?.[0] || 'Run repair or open Diagnostics for render details.';
+    const updateSetupState = updateStatus?.state === 'failed' || update?.error
+        ? 'needs-attention'
+        : update?.hasUpdate || updateStatus?.state === 'ready-to-install'
+            ? 'needs-attention'
+            : update ? 'ready' : 'checking';
+    const updateSetupText = update?.hasUpdate
+        ? `v${String(update.latest || '').replace(/^v/, '')} available.`
+        : update?.error ? 'GitHub release check failed.' : update ? 'In-app updater is ready.' : 'Checking update status.';
+    const manimSetupState = manimHealth?.ready ? 'ready' : manimHealth?.status === 'python-only' ? 'python-only' : 'optional';
+    const manimSetupText = manimHealth?.ready
+        ? manimHealth.manim?.version || 'Local Manim is ready.'
+        : manimHealth?.python?.installed ? 'Python found. Manim can be installed when you need Motion Diagram renders.' : 'Optional local engine for Motion Diagram renders.';
+    const transcribers = Array.isArray(transcriberState?.providers) ? transcriberState.providers : [];
+    const readyTranscriber = transcribers.find(item => item.ready);
+    const transcriptionSetupState = readyTranscriber ? 'ready' : 'optional';
+    const transcriptionSetupText = readyTranscriber
+        ? `${readyTranscriber.label} ready.`
+        : 'Optional. SRT/VTT import still works without local transcription.';
+    const requiredSetupItems = [
+        {
+            title: 'AI provider',
+            description: providerSetupText,
+            state: providerSetupState,
+            actionLabel: providerReady ? '' : 'Open login',
+            onAction: handleOpenProviderLogin
+        },
+        {
+            title: 'Render engine',
+            description: renderSetupText,
+            state: renderSetupState,
+            actionLabel: renderHealth?.ready ? '' : 'Repair render',
+            onAction: handleRepairRenderDeps
+        },
+        {
+            title: 'Updates',
+            description: updateSetupText,
+            state: updateSetupState,
+            actionLabel: update?.hasUpdate || updateStatus?.state === 'ready-to-install' ? 'Update' : update?.error ? 'Retry' : '',
+            onAction: update?.hasUpdate || updateStatus?.state === 'ready-to-install' ? handleUpdateResolveAI : () => runCheck(true)
+        }
+    ];
+    const optionalSetupItems = [
+        {
+            title: 'Motion Diagram / Manim',
+            description: manimSetupText,
+            state: manimSetupState,
+            actionLabel: manimHealth?.ready ? '' : manimHealth?.python?.installed ? 'Install Manim' : 'Get Python',
+            onAction: handleOpenManimInstall
+        },
+        {
+            title: 'Local transcription',
+            description: transcriptionSetupText,
+            state: transcriptionSetupState,
+            actionLabel: '',
+            onAction: null
+        }
+    ];
+    const requiredReadyCount = requiredSetupItems.filter(item => item.state === 'ready').length;
+    const optionalReadyCount = optionalSetupItems.filter(item => item.state === 'ready').length;
+    const transcriptionMeta = readyTranscriber ? readyTranscriber.label : transcriptionSettings.provider === 'none' ? 'Import only' : 'Needs setup';
     const brandFilledCount = useMemo(() => {
         return ['colors', 'fonts', 'tone', 'logoPath', 'phrases'].filter(key => String(brandKit[key] || '').trim()).length;
     }, [brandKit]);
@@ -461,6 +659,32 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
             />
 
             <div className="settings-scroll">
+                <SettingsSection title="Setup" meta={`${requiredReadyCount}/${requiredSetupItems.length} required ready`}>
+                    <div className="setup-overview">
+                        <div>
+                            <strong>{requiredReadyCount === requiredSetupItems.length ? 'Ready for normal use' : 'Needs setup'}</strong>
+                            <span>Core generation needs an AI provider and the render engine. Manim and local transcription are optional.</span>
+                        </div>
+                        <button className="settings-small-btn" onClick={handleCopySetupDiagnostics}>
+                            {setupStatus || 'Copy setup diagnostics'}
+                        </button>
+                    </div>
+                    <div className="setup-checklist" aria-label="Required setup">
+                        {requiredSetupItems.map(item => (
+                            <SetupChecklistItem key={item.title} {...item} />
+                        ))}
+                    </div>
+                    <div className="setup-checklist optional" aria-label="Optional setup">
+                        <div className="setup-optional-head">
+                            <span>Optional tools</span>
+                            <em>{optionalReadyCount}/{optionalSetupItems.length} ready</em>
+                        </div>
+                        {optionalSetupItems.map(item => (
+                            <SetupChecklistItem key={item.title} {...item} />
+                        ))}
+                    </div>
+                </SettingsSection>
+
                 <SettingsSection title="Provider" meta={statusLabel(activeProviderStatus)}>
                     <div className="settings-summary-strip">
                         <span>Active</span>
@@ -665,6 +889,71 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
                             <option value="high">High quality</option>
                         </select>
                     </SettingRow>
+                </SettingsSection>
+
+                <SettingsSection title="Optional Tools" meta={transcriptionMeta} defaultOpen={false}>
+                    <div className="render-settings-note">
+                        Optional engines stay local. Missing Manim or Whisper never blocks normal overlay generation or rendering.
+                    </div>
+                    <SettingRow
+                        label="Motion Diagram"
+                        help={manimHealth?.ready ? 'Local Manim is available for Motion Diagram MP4 renders.' : 'Install only if you want local Manim diagram renders.'}
+                        value={manimHealth?.ready ? 'Ready' : manimHealth?.python?.installed ? 'Python ready' : 'Optional'}
+                    >
+                        <button
+                            className="settings-small-btn"
+                            onClick={handleOpenManimInstall}
+                            disabled={manimHealth?.ready}
+                        >
+                            {manimHealth?.ready ? 'Installed' : manimHealth?.python?.installed ? 'Install Manim' : 'Get Python'}
+                        </button>
+                    </SettingRow>
+                    <SettingRow label="Transcription" help="Used by AI Clip Finder. Importing SRT/VTT works even when this is off.">
+                        <select
+                            className="select"
+                            value={transcriptionSettings.provider}
+                            onChange={e => updateTranscriptionSetting({ provider: e.target.value })}
+                        >
+                            <option value="none">None / import transcripts</option>
+                            <option value="resolve">Resolve TranscribeAudio</option>
+                            <option value="whisper">OpenAI Whisper CLI</option>
+                            <option value="whisperCpp">whisper.cpp</option>
+                        </select>
+                    </SettingRow>
+                    <SettingRow label="Command path" help="Optional absolute path to whisper or whisper-cli. Leave blank to search PATH.">
+                        <input
+                            className="text-field"
+                            value={transcriptionSettings.commandPath || ''}
+                            onChange={e => updateTranscriptionSetting({ commandPath: e.target.value })}
+                            placeholder="Auto"
+                            disabled={transcriptionSettings.provider === 'none' || transcriptionSettings.provider === 'resolve'}
+                        />
+                    </SettingRow>
+                    <SettingRow label="Model" help="Whisper model name, or local .bin model path for whisper.cpp.">
+                        <input
+                            className="text-field"
+                            value={transcriptionSettings.model || ''}
+                            onChange={e => updateTranscriptionSetting({ model: e.target.value })}
+                            placeholder={transcriptionSettings.provider === 'whisperCpp' ? 'C:\\path\\ggml-base.bin' : 'base'}
+                            disabled={transcriptionSettings.provider === 'none' || transcriptionSettings.provider === 'resolve'}
+                        />
+                    </SettingRow>
+                    <SettingRow label="Language" help="Optional language hint, for example en, es, fr, ar.">
+                        <input
+                            className="text-field"
+                            value={transcriptionSettings.language || ''}
+                            onChange={e => updateTranscriptionSetting({ language: e.target.value })}
+                            placeholder="Auto"
+                            disabled={transcriptionSettings.provider === 'none'}
+                        />
+                    </SettingRow>
+                    {transcribers.length > 0 && (
+                        <div className="optional-tool-status">
+                            {transcribers.map(item => (
+                                <span key={item.id}>{item.label}: {item.status || (item.ready ? 'Ready' : 'Unavailable')}</span>
+                            ))}
+                        </div>
+                    )}
                 </SettingsSection>
 
                 <SettingsSection title="Analysis Safety" meta={config.analysis?.enabled === false ? 'Off' : 'Source-safe'} defaultOpen={false}>
@@ -944,6 +1233,9 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
                                 Open release notes
                             </button>
                         )}
+                        <button className="settings-link-btn" onClick={handleCopyUpdateDiagnostics}>
+                            {updateDiagStatus || 'Copy update diagnostics'}
+                        </button>
                     </div>
                 </SettingsSection>
             </div>

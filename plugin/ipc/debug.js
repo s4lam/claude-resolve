@@ -8,6 +8,7 @@ const { readAssets } = require('./assets');
 const { getLastRenderError, getRenderHealth, summarizeRenderHealth } = require('./render-health');
 const { buildCapabilityReport, getLatestSafetySnapshot } = require('./resolve-diagnostics');
 const { listAnalysisReports } = require('./analysis');
+const { getUpdateStatus, installDestinationForPlatform } = require('./updates');
 
 const DEBUG_DIR = path.join(CONFIG_DIR, 'debug-bundles');
 
@@ -45,6 +46,8 @@ async function createDebugBundle(options = {}) {
     }));
     const config = readConfig();
     const renderHealth = getRenderHealth(config);
+    let updateStatus = null;
+    try { updateStatus = getUpdateStatus(); } catch (_err) { updateStatus = null; }
     let capabilityReport = null;
     try {
         capabilityReport = await buildCapabilityReport({ config });
@@ -77,6 +80,12 @@ async function createDebugBundle(options = {}) {
             summary: scrubObject(summarizeRenderHealth(renderHealth)),
             lastError: scrubObject(getLastRenderError())
         },
+        installUpdateDiagnostics: {
+            updateStatus: scrubObject(updateStatus),
+            pluginDestination: scrub(installDestinationForPlatform(process.platform)),
+            installerLogPaths: expectedInstallerLogPaths().map(scrub),
+            notes: 'Release installers preserve user config/renders/assets/sessions. Review paths before sharing publicly.'
+        },
         assets,
         renders: renders.map(name => scrub(path.join(RENDER_DIR, name))),
         notes: 'Local diagnostic bundle. Review before sharing publicly.'
@@ -86,6 +95,13 @@ async function createDebugBundle(options = {}) {
     fs.writeFileSync(filePath, serialized, 'utf8');
     if (clipboard?.writeText) clipboard.writeText(serialized);
     return { success: true, path: filePath, summary: { assets: assets.length, renders: renders.length } };
+}
+
+function expectedInstallerLogPaths() {
+    return [
+        path.join(CONFIG_DIR, 'installer.log'),
+        path.join(CONFIG_DIR, 'update-installer.log')
+    ];
 }
 
 function safeReadPackageVersion() {
@@ -102,6 +118,7 @@ function setupDebugHandlers(ipcMain) {
 
 module.exports = {
     createDebugBundle,
+    expectedInstallerLogPaths,
     scrub,
     setupDebugHandlers
 };

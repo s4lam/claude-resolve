@@ -11,6 +11,7 @@ const zipNames = [
     `ResolveAI-macOS-v${version}.zip`
 ];
 const stageDir = path.join(outDir, 'resolve-ai');
+const validationDir = path.join(outDir, 'validation');
 
 function ensureBuiltinTemplatePack() {
     const dataDir = path.join(root, 'plugin', 'data');
@@ -65,7 +66,74 @@ function runPluginBuild() {
     });
 }
 
+function writeReleaseMetadata() {
+    const manifest = {
+        name: 'Resolve AI',
+        version,
+        generatedAt: new Date().toISOString(),
+        assets: zipNames,
+        install: {
+            windows: 'Double-click install.bat from the extracted ResolveAI-Windows ZIP.',
+            macOS: 'Double-click install.command from the extracted ResolveAI-macOS ZIP.',
+            warning: 'Download ResolveAI-...zip from GitHub Releases, not GitHub Source code.zip.'
+        },
+        required: [
+            'plugin/manifest.xml',
+            'plugin/main.js',
+            'plugin/preload.js',
+            'plugin/dist/index.html',
+            'plugin/data/builtin-template-packs.json',
+            'plugin/renderer/render.js',
+            'plugin/renderer/package.json',
+            'plugin/renderer/package-lock.json',
+            'plugin/scripts/check-render-deps.js',
+            'plugin/updater/install-update.ps1',
+            'plugin/updater/install-update.sh',
+            'install.bat',
+            'install.ps1',
+            'install.sh',
+            'install.command',
+            'Install Resolve AI.bat',
+            'Install Resolve AI.command'
+        ]
+    };
+    fs.writeFileSync(path.join(stageDir, 'release-manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
+    fs.writeFileSync(path.join(stageDir, 'INSTALL-FIRST.txt'), [
+        'Resolve AI installer',
+        '',
+        'Use this release ZIP, not GitHub Source code.zip.',
+        '',
+        'Windows:',
+        '  Double-click install.bat',
+        '',
+        'macOS:',
+        '  Double-click install.command',
+        '',
+        'After install, open DaVinci Resolve > Workspace > Workflow Integration > Resolve AI.',
+        ''
+    ].join('\n'), 'utf8');
+}
+
+function extractZip(zipPath, targetDir) {
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    fs.mkdirSync(targetDir, { recursive: true });
+    if (process.platform === 'win32') {
+        execFileSync('powershell.exe', [
+            '-NoProfile',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-Command',
+            '& { param($zipPath, $targetDir) Expand-Archive -LiteralPath $zipPath -DestinationPath $targetDir -Force }',
+            zipPath,
+            targetDir
+        ], { stdio: 'inherit' });
+        return;
+    }
+    execFileSync('unzip', ['-q', zipPath, '-d', targetDir], { stdio: 'inherit' });
+}
+
 fs.rmSync(stageDir, { recursive: true, force: true });
+fs.rmSync(validationDir, { recursive: true, force: true });
 fs.mkdirSync(stageDir, { recursive: true });
 ensureBuiltinTemplatePack();
 runPluginBuild();
@@ -75,11 +143,12 @@ for (const item of ['plugin', 'community-templates', 'screenshots', 'docs']) {
     if (fs.existsSync(source)) copyRecursive(source, path.join(stageDir, item));
 }
 
-for (const file of ['README.md', 'CONTRIBUTING.md', 'RELEASE_NOTES.md', 'LICENSE', 'install.bat', 'install.ps1', 'install.sh', 'install.command']) {
+for (const file of ['README.md', 'CONTRIBUTING.md', 'RELEASE_NOTES.md', 'LICENSE', 'install.bat', 'install.ps1', 'install.sh', 'install.command', 'Install Resolve AI.bat', 'Install Resolve AI.command']) {
     const source = path.join(root, file);
     if (fs.existsSync(source)) copyRecursive(source, path.join(stageDir, file));
 }
 
+writeReleaseMetadata();
 execFileSync(process.execPath, [path.join(root, 'scripts', 'validate-release-package.js'), stageDir], { stdio: 'inherit' });
 
 for (const zipName of zipNames) {
@@ -98,8 +167,12 @@ function createZip(zipName) {
         execFileSync('zip', ['-r', zipPath, '.'], { cwd: stageDir, stdio: 'inherit' });
     }
     console.log(zipPath);
+    return zipPath;
 }
 
 for (const zipName of zipNames) {
-    createZip(zipName);
+    const zipPath = createZip(zipName);
+    const target = path.join(validationDir, zipName.replace(/\.zip$/i, ''));
+    extractZip(zipPath, target);
+    execFileSync(process.execPath, [path.join(root, 'scripts', 'validate-release-package.js'), target], { stdio: 'inherit' });
 }

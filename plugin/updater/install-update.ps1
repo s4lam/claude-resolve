@@ -41,6 +41,13 @@ if ($Destination -notmatch '[\\/]Workflow Integration Plugins[\\/]com\.clauderes
     throw "Refusing unexpected plugin destination: $Destination"
 }
 
+$configDir = Join-Path $env:APPDATA "Blackmagic Design\DaVinci Resolve\Claude Resolve"
+$updateLog = Join-Path $configDir "update-installer.log"
+try {
+    New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+    Start-Transcript -Path $updateLog -Append | Out-Null
+} catch { }
+
 Write-Host "Resolve AI updater"
 Write-Host "Waiting for plugin window to close..."
 
@@ -62,8 +69,15 @@ Require-File (Join-Path $Source "manifest.xml")
 Require-File (Join-Path $Source "main.js")
 Require-File (Join-Path $Source "preload.js")
 Require-File (Join-Path $Source "dist\index.html")
+Require-File (Join-Path $Source "data\builtin-template-packs.json")
 Require-File (Join-Path $Source "renderer\render.js")
+Require-File (Join-Path $Source "scripts\check-render-deps.js")
+Require-File (Join-Path $Source "updater\install-update.ps1")
+Require-File (Join-Path $Source "updater\install-update.sh")
 
+if ((Test-Path -LiteralPath $parentDir) -and -not (Test-Path -LiteralPath $parentDir -PathType Container)) {
+    Move-Item -LiteralPath $parentDir -Destination "$parentDir.blocked.$timestamp" -Force
+}
 New-Item -ItemType Directory -Force -Path $parentDir | Out-Null
 Remove-Item -LiteralPath $tempDest -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -94,6 +108,7 @@ try {
     Write-Host ""
     Write-Host "Update installed."
     Write-Host "Reopen Resolve AI from Workspace > Workflow Integration."
+    try { Stop-Transcript | Out-Null } catch { }
     exit 0
 } catch {
     Write-Host ""
@@ -104,5 +119,6 @@ try {
         Write-Host "Restoring previous plugin..."
         Move-Item -LiteralPath $Backup -Destination $Destination -Force
     }
+    try { Stop-Transcript | Out-Null } catch { }
     exit 1
 }

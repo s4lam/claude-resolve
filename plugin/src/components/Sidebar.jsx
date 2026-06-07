@@ -18,8 +18,8 @@ const TOOL_TABS = [
     { id: 'sessions', label: 'Sessions', modes: ['create', 'produce', 'discover'] },
     { id: 'create', label: 'Create', modes: ['create'] },
     { id: 'assets', label: 'Assets', modes: ['create'] },
-    { id: 'ograph', label: 'Ograph', modes: ['create', 'produce'] },
-    { id: 'manim', label: 'Manim Lab', modes: ['create', 'produce'] },
+    { id: 'ograph', label: 'Workflow Graph', modes: ['create', 'produce'] },
+    { id: 'manim', label: 'Motion Diagram', modes: ['create', 'produce'] },
     { id: 'variations', label: 'Variations', modes: ['create'] },
     { id: 'gallery', label: 'Gallery', modes: ['create'] },
     { id: 'templates', label: 'Templates', modes: ['create'] },
@@ -94,7 +94,7 @@ export default function Sidebar({
 
     useEffect(() => {
         if (view !== 'tools') return;
-        if (!sourceDraft?.source) return;
+        if (!sourceDraft?.source && !sourceDraft?.idea && !sourceDraft?.jobId && !sourceDraft?.error) return;
         openTool('manim', sourceDraft);
     }, [sourceDraft?.revision, view]);
 
@@ -140,14 +140,19 @@ export default function Sidebar({
 
     function openTool(id, options = {}) {
         if (id === 'ograph' && options.graphId) setFocusedOgraphId(options.graphId);
-        if (id === 'manim' && (options.source || options.idea || options.graphId)) {
+        if (id === 'manim' && (options.source || options.idea || options.graphId || options.jobId || options.error)) {
             setManimDraft({
                 source: options.source || '',
                 idea: options.idea || '',
                 title: options.title || '',
                 origin: options.origin || (options.graphId ? 'ograph' : ''),
                 graphId: options.graphId || '',
-                revision: Date.now()
+                autoRender: Boolean(options.autoRender),
+                autoAddToTimeline: Boolean(options.autoAddToTimeline),
+                quality: options.quality || '',
+                error: options.error || '',
+                jobId: options.jobId || '',
+                revision: options.revision || Date.now()
             });
         }
         setActiveTool(id);

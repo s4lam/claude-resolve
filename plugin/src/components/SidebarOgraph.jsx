@@ -134,9 +134,9 @@ function graphReadiness(graph) {
             score,
             state: 'ready-manim',
             label: 'Manim source ready',
-            detail: 'Open the source in Manim Lab to validate and render it.',
+            detail: 'Open the source in Motion Diagram to validate and render it.',
             missing,
-            next: { label: 'Open in Manim Lab', action: 'manim', nodeId: manim.id }
+            next: { label: 'Open in Motion Diagram', action: 'manim', nodeId: manim.id }
         };
     }
     if (html && !render) {
@@ -183,7 +183,7 @@ function sourceLabel(source) {
     if (source === 'render') return 'Render history';
     if (source === 'template') return 'Template';
     if (source === 'manual') return 'Manual';
-    if (source === 'manim') return 'Manim Lab';
+    if (source === 'manim') return 'Motion Diagram';
     return 'Generation';
 }
 
@@ -798,10 +798,10 @@ export default function SidebarOgraph({
                             Add at Playhead
                         </button>
                         <button type="button" className="mini-action" onClick={openGraphInManim} disabled={busy || !manimSourceForGraph()}>
-                            Open in Manim Lab
+                            Open in Motion Diagram
                         </button>
                         <button type="button" className="mini-action" onClick={openGraphAsManimBrief} disabled={busy || !selectedGraph}>
-                            Use as Manim brief
+                            Use as Motion Diagram brief
                         </button>
                     </div>
                 </div>

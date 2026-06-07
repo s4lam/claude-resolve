@@ -288,43 +288,44 @@ async function main() {
         await blankPrompt.click({ timeout: 10000 });
     }
     try {
-        await page.getByRole('button', { name: 'Use in Manim Lab' }).waitFor({ timeout: 10000 });
+        await page.getByRole('button', { name: 'Use in Motion Diagram' }).waitFor({ timeout: 10000 });
     } catch (err) {
         const bodyText = await page.locator('body').innerText().catch(() => '');
         throw new Error(`Saved smoke session did not render Manim button. Body: ${bodyText.slice(0, 900)} Logs: ${browserMessages.slice(-8).join(' | ')}`);
     }
-    await page.getByRole('button', { name: 'Save to Ograph' }).click();
-    await page.getByRole('tab', { name: 'Ograph' }).waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Save to Workflow Graph' }).click();
+    await page.getByRole('tab', { name: 'Workflow Graph' }).waitFor({ timeout: 10000 });
     await page.locator('.ograph-card-head strong', { hasText: 'ChatOverlay' }).waitFor({ timeout: 10000 });
     await page.locator('.ograph-stage-node.generation', { hasText: 'ChatOverlay' }).waitFor({ timeout: 10000 });
     mark('chat result saved to ograph');
-    await page.locator('.workspace-inspector .inspector-flow-step', { hasText: 'Ograph' }).click();
-    await page.getByRole('tab', { name: 'Ograph' }).waitFor({ timeout: 10000 });
+    await page.locator('.workspace-inspector .inspector-flow-step', { hasText: 'Workflow Graph' }).click();
+    await page.getByRole('tab', { name: 'Workflow Graph' }).waitFor({ timeout: 10000 });
     mark('inspector opened ograph');
-    await page.locator('.workspace-inspector .inspector-flow-step', { hasText: 'Manim Lab' }).click();
-    await page.getByText('Render Manim MP4').waitFor({ timeout: 10000 });
+    await page.locator('.workspace-inspector .inspector-flow-step', { hasText: 'Motion Diagram' }).click();
+    await page.getByText('Generate, Render & Add').waitFor({ timeout: 10000 });
     mark('inspector opened manim');
-    await page.getByRole('button', { name: 'Use in Manim Lab' }).click();
-    await page.getByText('Render Manim MP4').waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Use in Motion Diagram' }).click();
+    await page.getByText('Source ready').waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Edit source' }).click();
     mark('chat manim source loaded');
     await page.locator('.manim-source').evaluate(node => {
         if (!node.value.includes('ResolveAIManimScene')) throw new Error('Chat Manim source did not populate Manim source.');
         if (!node.value.includes('Square')) throw new Error('Chat Manim source did not populate.');
     });
-    await page.getByRole('button', { name: 'Save draft to Ograph' }).click();
+    await page.getByRole('button', { name: 'Save draft history' }).click();
     await page.locator('.ograph-readiness', { hasText: 'Manim source ready' }).waitFor({ timeout: 10000 });
     await page.locator('.ograph-stage-map', { hasText: 'Create' }).waitFor({ timeout: 10000 });
     await page.locator('.ograph-stage-node.manim', { hasText: 'Manim Source' }).waitFor({ timeout: 10000 });
     mark('manim draft saved to ograph');
-    await page.locator('.ograph-readiness .mini-action', { hasText: 'Open in Manim Lab' }).click();
+    await page.locator('.ograph-readiness .mini-action', { hasText: 'Open in Motion Diagram' }).click();
     try {
-        await page.getByText(/Loaded .* from Ograph:/).waitFor({ timeout: 10000 });
+        await page.getByText(/Loaded .* from Workflow Graph:/).waitFor({ timeout: 10000 });
     } catch (err) {
         const bodyText = await page.locator('body').innerText().catch(() => '');
         throw new Error(`Manim source did not reopen from Ograph. Body: ${bodyText.slice(0, 1000)}`);
     }
     mark('manim draft reopened from ograph');
-    await page.getByRole('tab', { name: 'Ograph' }).click();
+    await page.getByRole('tab', { name: 'Workflow Graph' }).click();
     await page.locator('#ograph-select').selectOption({ label: 'Smoke Test Ograph' });
     await page.locator('.ograph-card-head strong', { hasText: 'Smoke Test Ograph' }).waitFor({ timeout: 10000 });
     mark('smoke ograph selected');
@@ -333,14 +334,14 @@ async function main() {
     await page.locator('.ograph-stage-map', { hasText: 'Timeline' }).waitFor({ timeout: 10000 });
     await page.locator('.ograph-stage-node.generation', { hasText: 'Generated HTML' }).click();
     mark('smoke generation node selected');
-    await page.locator('.ograph-action-grid .mini-action', { hasText: 'Use as Manim brief' }).click();
-    await page.getByText('Loaded brief from Ograph: Smoke Test Ograph').waitFor({ timeout: 10000 });
+    await page.locator('.ograph-action-grid .mini-action', { hasText: 'Use as Motion Diagram brief' }).click();
+    await page.getByText('Loaded brief from Workflow Graph: Smoke Test Ograph').waitFor({ timeout: 10000 });
     await page.locator('#manim-idea').evaluate(node => {
         if (!node.value.includes('Smoke Test Ograph')) throw new Error('Ograph brief did not populate Manim idea.');
         if (!node.value.includes('Generated HTML')) throw new Error('Ograph brief omitted selected graph node context.');
     });
     mark('ograph brief opened in manim');
-    await page.getByRole('tab', { name: 'Ograph' }).click();
+    await page.getByRole('tab', { name: 'Workflow Graph' }).click();
     await page.locator('#ograph-select').selectOption({ label: 'Smoke Test Ograph' });
     await page.locator('.ograph-stage-node.generation', { hasText: 'Generated HTML' }).click();
     await page.locator('.ograph-action-grid .mini-action', { hasText: 'Cinematic' }).click();
@@ -360,20 +361,20 @@ async function main() {
     const ographCanvasCount = await page.locator('.ograph-canvas').count();
     mark('ograph render workflow complete');
     await page.getByRole('button', { name: 'Produce' }).click();
-    await page.getByRole('tab', { name: 'Manim Lab' }).click();
-    await page.getByText('Render Manim MP4').waitFor({ timeout: 10000 });
+    await page.getByRole('tab', { name: 'Motion Diagram' }).click();
+    await page.getByText('Generate, Render & Add').waitFor({ timeout: 10000 });
     await page.getByRole('button', { name: 'Use latest AI source' }).click();
     await page.locator('.manim-source').evaluate(node => {
         if (!node.value.includes('ResolveAIManimScene')) throw new Error('Latest AI source did not populate Manim source.');
         if (!node.value.includes('Square')) throw new Error('Latest AI Manim source did not populate.');
     });
-    await page.getByRole('button', { name: 'Render Manim MP4' }).click();
+    await page.getByRole('button', { name: 'Render only' }).click();
     await page.getByRole('button', { name: 'Add at Playhead' }).waitFor({ timeout: 10000 });
     const manimPanelCount = await page.locator('.manim-source-panel').count();
     mark('manim rendered');
-    await page.getByRole('button', { name: 'Save render to Ograph' }).click();
+    await page.getByRole('button', { name: 'Save render history' }).click();
     await page.locator('.ograph-card-head strong', { hasText: 'Manim Smoke Graph' }).waitFor({ timeout: 10000 });
-    await page.locator('.ograph-source', { hasText: 'Manim Lab' }).waitFor({ timeout: 10000 });
+    await page.locator('.ograph-source', { hasText: 'Motion Diagram' }).waitFor({ timeout: 10000 });
     await page.locator('.ograph-stage-node.manim', { hasText: 'Manim Source' }).waitFor({ timeout: 10000 });
     await page.locator('.ograph-stage-node.render', { hasText: 'Manim Render' }).waitFor({ timeout: 10000 });
     mark('manim render saved to ograph');
@@ -381,10 +382,13 @@ async function main() {
         throw new Error('Manim Ograph should not expose HTML Render graph action.');
     }
     await page.locator('.ograph-section').waitFor({ timeout: 10000 });
-    await page.getByRole('button', { name: 'Open in Manim Lab' }).click();
-    await page.getByText('Loaded source from Ograph: Manim Smoke Graph').waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Open in Motion Diagram' }).click();
+    await page.getByText('Loaded source from Workflow Graph: Manim Smoke Graph').waitFor({ timeout: 10000 });
+    if (await page.getByRole('button', { name: 'Edit source' }).count()) {
+        await page.getByRole('button', { name: 'Edit source' }).click();
+    }
     await page.locator('.manim-source').evaluate(node => {
-        if (!node.value.includes('ResolveAIManimScene')) throw new Error('Ograph source did not reopen in Manim Lab.');
+        if (!node.value.includes('ResolveAIManimScene')) throw new Error('Workflow Graph source did not reopen in Motion Diagram.');
         if (!node.value.includes('Square')) throw new Error('Ograph Manim source content was not preserved.');
     });
     mark('manim render reopened from ograph');
