@@ -89,6 +89,17 @@ function extractManimSourceFromText(text = '') {
     return candidate;
 }
 
+function describeManimGenerationFailure(text = '') {
+    const content = String(text || '');
+    if (/unsupported.*model|model.*not supported|invalid_request_error/i.test(content)) {
+        return 'The AI provider rejected the selected model. In Settings > Provider, set Codex model to GPT-5.5 or GPT-5.4 Mini, then try again.';
+    }
+    if (/not logged in|authentication|invalid credentials|login/i.test(content)) {
+        return 'The AI provider needs login. Open Settings > Setup and use the provider login action.';
+    }
+    return 'The assistant finished without a valid ResolveAIManimScene Python source block.';
+}
+
 function buildSessionContinuationPrompt(promptText, session, messages = []) {
     const recentTurns = messages
         .filter(message => !message.isThinking && message.text)
@@ -125,7 +136,7 @@ export default function App() {
         provider: 'auto',
         model: 'sonnet',
         effort: 'auto',
-        codexModel: 'default',
+        codexModel: 'gpt-5.5',
         fps: 25,
         width: 1920,
         height: 1080,
@@ -287,9 +298,11 @@ export default function App() {
             : {
                 source: '',
                 idea: pendingManimJob.idea || 'Generated motion diagram',
-                title: 'Motion Diagram source missing',
+                title: /unsupported.*model|model.*not supported|invalid_request_error/i.test(message.text || '')
+                    ? 'Motion Diagram provider setup needed'
+                    : 'Motion Diagram source missing',
                 origin: 'chat',
-                error: 'The assistant finished without a valid ResolveAIManimScene Python source block.',
+                error: describeManimGenerationFailure(message.text),
                 autoRender: false,
                 autoAddToTimeline: false,
                 quality: pendingManimJob.quality || 'low',

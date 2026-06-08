@@ -114,6 +114,27 @@ export default function SidebarManimLab({
         }
     }
 
+    async function openInstallTerminal() {
+        setBusy(true);
+        setError('');
+        try {
+            const result = await window.manimAPI?.openInstallTerminal?.();
+            if (result?.success) {
+                setPipeline(current => ({
+                    ...current,
+                    status: 'idle',
+                    message: 'Manim install terminal opened. After it finishes, click Retry.'
+                }));
+            } else {
+                setError('Python is missing. Install Python 3.11+, then retry Manim setup.');
+            }
+        } catch (err) {
+            setError(err.message || 'Could not open Manim install terminal.');
+        } finally {
+            setBusy(false);
+        }
+    }
+
     useEffect(() => {
         refreshHealth();
         if (window.manimAPI?.getStarterScenes) {
@@ -280,7 +301,10 @@ export default function SidebarManimLab({
         });
         setValidation(result.validation || null);
         setRenderResult(result);
-        if (!result?.success) throw new Error(result?.error || 'Manim render failed.');
+        if (!result?.success) {
+            const commandText = result.command ? ` Command: ${result.command} ${(result.args || []).join(' ')}` : '';
+            throw new Error(`${result?.error || 'Manim render failed.'}${commandText}`);
+        }
         return result;
     }
 
@@ -537,8 +561,11 @@ export default function SidebarManimLab({
             {renderBlocked && (
                 <div className="manim-setup-callout">
                     <strong>Rendering is disabled until Manim is installed.</strong>
-                    <p>Run this in PowerShell or Terminal, then click Retry:</p>
+                    <p>Open a visible terminal installer, wait for it to finish, then click Retry.</p>
                     <code>python -m pip install manim</code>
+                    <button type="button" className="mini-action" onClick={openInstallTerminal} disabled={busy}>
+                        Install Manim
+                    </button>
                 </div>
             )}
 

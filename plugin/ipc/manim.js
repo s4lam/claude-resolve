@@ -1,12 +1,14 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { spawn, spawnSync } = require('child_process');
-const { ENV, isMac, CONFIG_DIR, RENDER_DIR } = require('./paths');
+const { execSync, spawn, spawnSync } = require('child_process');
+const { ENV, isMac, CONFIG_DIR, RENDER_DIR, APP_PYTHON_BIN } = require('./paths');
 
 const MANIM_CANDIDATES = isMac
-  ? ['/opt/homebrew/bin/manim', '/usr/local/bin/manim', 'manim']
+  ? [path.join(APP_PYTHON_BIN, 'manim'), '/opt/homebrew/bin/manim', '/usr/local/bin/manim', 'manim']
   : [
+      path.join(APP_PYTHON_BIN, 'manim.exe'),
+      path.join(APP_PYTHON_BIN, 'manim.cmd'),
       path.join(process.env.APPDATA || '', 'Python', 'Scripts', 'manim.exe'),
       path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python312', 'Scripts', 'manim.exe'),
       path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python311', 'Scripts', 'manim.exe'),
@@ -14,8 +16,20 @@ const MANIM_CANDIDATES = isMac
     ];
 
 const PYTHON_CANDIDATES = isMac
-  ? ['/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3', 'python']
-  : ['py', 'python', 'python3'];
+  ? [path.join(APP_PYTHON_BIN, 'python'), '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3', 'python']
+  : [
+      path.join(APP_PYTHON_BIN, 'python.exe'),
+      path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python312', 'python.exe'),
+      path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python311', 'python.exe'),
+      path.join(process.env.PROGRAMFILES || '', 'Python312', 'python.exe'),
+      path.join(process.env.PROGRAMFILES || '', 'Python311', 'python.exe'),
+      'python.exe',
+      'python3.exe',
+      'py.exe',
+      'python',
+      'python3',
+      'py'
+    ];
 const MANIM_INSTALL_PACKAGE = 'manim';
 
 const MANIM_DIR = path.join(CONFIG_DIR, 'manim');
@@ -29,6 +43,33 @@ const DANGEROUS_PATTERNS = [
   /import\s+(os|sys|subprocess|socket|requests|urllib|pathlib|shutil|ctypes|pickle|marshal)\b/
 ];
 const ALLOWED_IMPORT_ROOTS = new Set(['manim', 'math', 'numpy', 'random']);
+
+function resolveBundledFfmpegPath() {
+  const moduleDir = path.join(__dirname, '..', 'renderer', 'node_modules', 'ffmpeg-static');
+  try {
+    const ffmpegPath = require(moduleDir);
+    if (ffmpegPath && fs.existsSync(ffmpegPath)) return ffmpegPath;
+  } catch {
+    // Fall through to direct binary candidates.
+  }
+  const candidates = [
+    path.join(moduleDir, 'ffmpeg.exe'),
+    path.join(moduleDir, 'ffmpeg')
+  ];
+  return candidates.find(candidate => fs.existsSync(candidate)) || '';
+}
+
+function buildManimEnv(baseEnv = ENV) {
+  const ffmpegPath = resolveBundledFfmpegPath();
+  if (!ffmpegPath) return baseEnv;
+  const ffmpegDir = path.dirname(ffmpegPath);
+  return {
+    ...baseEnv,
+    PATH: `${ffmpegDir}${path.delimiter}${baseEnv.PATH || process.env.PATH || ''}`,
+    FFMPEG_BINARY: ffmpegPath,
+    IMAGEIO_FFMPEG_EXE: ffmpegPath
+  };
+}
 
 const STARTER_SCENES = [
   {
@@ -72,11 +113,10 @@ class ResolveAIManimScene(Scene):
 
 class ResolveAIManimScene(Scene):
     def construct(self):
-        equation = MathTex("a^2", "+", "b^2", "=", "c^2").scale(1.6)
+        equation = Text("a^2 + b^2 = c^2", font_size=58)
         label = Text("Relationship becomes visible", font_size=34).next_to(equation, DOWN, buff=0.55)
         frame = SurroundingRectangle(equation, buff=0.28, corner_radius=0.16).set_stroke(TEAL, width=3)
-        self.play(Write(equation[0]), Write(equation[2]), run_time=0.8)
-        self.play(FadeIn(equation[1]), FadeIn(equation[3]), Write(equation[4]), run_time=0.9)
+        self.play(Write(equation), run_time=1.0)
         self.play(Create(frame), FadeIn(label, shift=UP * 0.2), run_time=0.9)
         self.wait(1.4)`
   },
@@ -128,6 +168,23 @@ function firstLine(text = '') {
   return String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean)[0] || '';
 }
 
+function formatManimRenderError(stderr = '', fallback = '') {
+  const combined = `${stderr || ''}\n${fallback || ''}`;
+  const winMissing = combined.match(/FileNotFoundError:\s*\[WinError 2\]\s*([^\r\n]+)/i);
+  if (winMissing) return `Missing helper executable: ${winMissing[1].trim()}. Bundled FFmpeg is added automatically; if this source uses Tex or MathTex, regenerate it with Text instead.`;
+  const lines = String(stderr || '')
+    .split(/\r?\n/)
+    .map(line => line.replace(/[│┃]/g, '').trim())
+    .filter(Boolean)
+    .filter(line => !/^[+\-=\s]+$/.test(line))
+    .filter(line => !/traceback \(most recent call last\)/i.test(line))
+    .filter(line => !/^manim community/i.test(line));
+  const exception = [...lines].reverse().find(line => /^[A-Za-z_][\w.]*(Error|Exception|Warning)\s*:/.test(line));
+  if (exception) return exception;
+  const useful = [...lines].reverse().find(line => !/^File\s+["']/.test(line) && !/^line\s+\d+/i.test(line));
+  return useful || firstLine(fallback) || 'Manim render failed.';
+}
+
 function getManimStarterScenes() {
   return STARTER_SCENES.map(scene => ({ ...scene }));
 }
@@ -141,13 +198,29 @@ function sanitizeFilename(value = 'manim-scene') {
     .slice(0, 80) || 'manim-scene';
 }
 
+function resolveExecutable(command) {
+  const value = String(command || '').trim();
+  if (!value) return '';
+  if (fs.existsSync(value)) return value;
+  if (isMac) return value;
+  try {
+    const escaped = value.replace(/"/g, '\\"');
+    const out = execSync(`where "${escaped}"`, { encoding: 'utf8', shell: true, timeout: 5000, env: ENV }).trim();
+    const found = out.split(/\r?\n/).map(line => line.trim()).find(line => line && fs.existsSync(line));
+    return found || value;
+  } catch {
+    return value;
+  }
+}
+
 function probeFirst(candidates, args, runCommand = defaultRunCommand) {
   for (const command of uniqueCandidates(candidates)) {
-    const result = runCommand(command, args);
+    const resolved = runCommand === defaultRunCommand ? resolveExecutable(command) : command;
+    const result = runCommand(resolved, args);
     if (result.ok) {
       return {
         installed: true,
-        command,
+        command: resolved,
         version: firstLine(`${result.stdout}\n${result.stderr}`),
         error: ''
       };
@@ -192,6 +265,10 @@ function detectManim(options = {}, runCommand = defaultRunCommand) {
     mode: manim.installed ? mode : 'unavailable',
     manim,
     python,
+    ffmpeg: {
+      bundledPath: resolveBundledFfmpegPath(),
+      ready: Boolean(resolveBundledFfmpegPath())
+    },
     renderCommand: manim.installed
       ? {
           command: mode === 'python-module' ? python.command : manim.command,
@@ -217,7 +294,7 @@ function buildManimInstallCommand(health = detectManim()) {
   }
   return {
     success: true,
-    command: `${shellQuote(pythonCommand)} -m pip install ${MANIM_INSTALL_PACKAGE}`
+    command: `${shellQuote(pythonCommand)} -m pip install --upgrade ${MANIM_INSTALL_PACKAGE} openai-whisper`
   };
 }
 
@@ -262,6 +339,11 @@ function buildManimPrompt(payload = {}) {
     'Use class name ResolveAIManimScene.',
     'Keep it local and deterministic: no network calls, no external downloads, no secrets, no absolute personal paths.',
     'Prefer vector geometry, text, diagrams, equations, arrows, axes, and clean explanatory motion.',
+    'Do not use Tex, MathTex, DecimalTable, or any LaTeX-dependent object. Use Text or MarkupText for formulas so the scene works without a TeX install.',
+    'Frame safety is mandatory: keep every visible object inside the camera frame with at least 10% margin on all edges.',
+    'After creating the main VGroup, scale it with scale_to_fit_width(config.frame_width * 0.82) and scale_to_fit_height(config.frame_height * 0.78) when needed, then move it to ORIGIN.',
+    'No labels, arrows, strokes, axes, or equations may extend outside the frame at any point in the animation.',
+    'Use moderate font sizes, balanced line breaks, and avoid long unwrapped text. Keep captions and labels inside safe margins.',
     'Return one complete Python file in a single ```python code block.',
     'Do not include shell commands unless they are comments at the bottom.',
     latestHtml ? 'Use this latest HTML overlay only as visual style reference, not as executable input:' : '',
@@ -305,6 +387,9 @@ function validateManimSource(input = '') {
   }
   if (!/(from\s+manim\s+import|import\s+manim)/.test(source)) {
     errors.push('Scene must import Manim.');
+  }
+  if (/\b(MathTex|Tex|SingleStringMathTex|DecimalTable|MathTable)\s*\(/.test(source)) {
+    errors.push('LaTeX-based Manim objects are disabled by default. Use Text or MarkupText for formulas so Motion Diagram works without a separate TeX install.');
   }
 
   for (const pattern of DANGEROUS_PATTERNS) {
@@ -380,8 +465,13 @@ function findNewestMp4(dir) {
 
 function runProcess(command, args, options = {}) {
   return new Promise((resolve) => {
-    const proc = spawn(command, args, {
-      env: ENV,
+    const resolvedCommand = resolveExecutable(command);
+    if (!resolvedCommand) {
+      resolve({ ok: false, code: -1, stdout: '', stderr: '', error: 'Render command is missing.' });
+      return;
+    }
+    const proc = spawn(resolvedCommand, args, {
+      env: buildManimEnv(ENV),
       cwd: options.cwd || undefined,
       windowsHide: true
     });
@@ -395,7 +485,7 @@ function runProcess(command, args, options = {}) {
     proc.stderr.on('data', data => { stderr += data.toString(); });
     proc.on('error', error => {
       clearTimeout(timeout);
-      resolve({ ok: false, code: -1, stdout, stderr, error: error.message });
+      resolve({ ok: false, code: -1, stdout, stderr, error: `${error.message} (${resolvedCommand})` });
     });
     proc.on('close', code => {
       clearTimeout(timeout);
@@ -434,7 +524,7 @@ async function renderManimScene(payload = {}, runner = runProcess) {
       scenePath,
       command: plan.command,
       args: plan.args,
-      error: firstLine(`${result.stderr}\n${result.error}`) || `Manim exited with code ${result.code}`,
+      error: formatManimRenderError(result.stderr, result.error || `Manim exited with code ${result.code}`),
       stdout: result.stdout,
       stderr: result.stderr
     };
@@ -489,6 +579,7 @@ module.exports = {
   detectManim,
   extractPythonSource,
   firstLine,
+  formatManimRenderError,
   getManimStarterScenes,
   openManimInstallTerminal,
   probeFirst,

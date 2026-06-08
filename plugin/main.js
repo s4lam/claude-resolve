@@ -15,6 +15,7 @@ const { setupTemplatePackHandlers } = require('./ipc/template-packs');
 const { setupCaptionHandlers } = require('./ipc/captions');
 const { setupShowcaseHandlers } = require('./ipc/showcase');
 const { setupUpdateHandlers } = require('./ipc/updates');
+const { setupSetupToolsHandlers } = require('./ipc/setup-tools');
 const { setupPreviewHandlers } = require('./ipc/preview');
 const { setupTimelineHandlers } = require('./ipc/timeline');
 const { setupResolveDiagnosticsHandlers } = require('./ipc/resolve-diagnostics');
@@ -68,6 +69,7 @@ app.whenReady().then(async () => {
     setupCaptionHandlers(ipcMain);
     setupShowcaseHandlers(ipcMain);
     setupUpdateHandlers(ipcMain, mainWindow);
+    setupSetupToolsHandlers(ipcMain);
     setupPreviewHandlers(ipcMain);
     setupTimelineHandlers(ipcMain);
     setupResolveDiagnosticsHandlers(ipcMain);

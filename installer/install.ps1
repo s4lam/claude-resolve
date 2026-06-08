@@ -1,9 +1,9 @@
 #Requires -Version 5.1
 <#
   Resolve AI - Windows installer.
-  Launched by install.bat as the CURRENT user (no up-front elevation). Node,
-  npm, AI CLIs, and Playwright run in the user's profile; only the final plugin
-  copy into ProgramData is elevated (see Copy-Plugin).
+  Launched by "Install Resolve AI.bat" as the CURRENT user (no up-front
+  elevation). Node, app-managed AI CLIs, Playwright, Manim, and Whisper run in
+  the user's profile; only the final plugin copy into ProgramData is elevated.
 #>
 
 # ---------------------------------------------------------------- console
@@ -90,9 +90,9 @@ function Show-Header {
 
 function Step([int]$n, [string]$msg) {
     Write-Host ''
-    $tag = "[$n/9]"
+    $tag = "[$n/10]"
     if ($Ansi) {
-        Write-Host (Tint (GradientAt ([double]($n - 1) / 8)) $tag) -NoNewline
+        Write-Host (Tint (GradientAt ([double]($n - 1) / 9)) $tag) -NoNewline
     } else {
         Write-Host $tag -ForegroundColor Cyan -NoNewline
     }
@@ -143,11 +143,17 @@ function Show-Success {
 }
 
 # ---------------------------------------------------------------- paths
-$RepoRoot         = $PSScriptRoot
+$InstallerDir     = $PSScriptRoot
+$RepoRoot         = Split-Path -Parent $InstallerDir
 $PluginSrc        = Join-Path $RepoRoot 'plugin'
 $RendererSrc      = Join-Path $PluginSrc 'renderer'
 $ConfigDir        = Join-Path $env:APPDATA 'Blackmagic Design\DaVinci Resolve\Claude Resolve'
 $InstallerLog     = Join-Path $ConfigDir 'installer.log'
+$DependencyStatus = Join-Path $ConfigDir 'dependency-status.json'
+$ToolsDir         = Join-Path $ConfigDir 'tools'
+$AppNpmPrefix     = Join-Path $ToolsDir 'npm'
+$AppPythonVenv    = Join-Path $ToolsDir 'python'
+$AppPythonScripts = Join-Path $AppPythonVenv 'Scripts'
 # Windows/ProgramData path includes the "Support" segment (the macOS path omits
 # it) — this matches Blackmagic's per-platform layout. Do not "sync" the two.
 $Dest             = Join-Path $env:ProgramData 'Blackmagic Design\DaVinci Resolve\Support\Workflow Integration Plugins\com.clauderesolve.plugin'
@@ -226,6 +232,39 @@ function Stop-InstallLog {
 Start-InstallLog
 Show-Header
 
+New-Item -ItemType Directory -Path $ToolsDir -Force | Out-Null
+New-Item -ItemType Directory -Path $AppNpmPrefix -Force | Out-Null
+$env:Path = (@($AppNpmPrefix, $AppPythonScripts, $env:Path) | Where-Object { $_ }) -join ';'
+
+$script:DependencyState = [ordered]@{
+    generatedAt = (Get-Date).ToString('o')
+    required = [ordered]@{}
+    providers = [ordered]@{}
+    optional = [ordered]@{}
+    paths = [ordered]@{
+        configDir = $ConfigDir
+        toolsDir = $ToolsDir
+        npmPrefix = $AppNpmPrefix
+        pythonVenv = $AppPythonVenv
+        installerLog = $InstallerLog
+    }
+}
+
+function Set-DependencyStatus($group, $name, $state, $detail = '') {
+    if (-not $script:DependencyState.Contains($group)) {
+        $script:DependencyState[$group] = [ordered]@{}
+    }
+    $script:DependencyState[$group][$name] = [ordered]@{
+        state = $state
+        detail = $detail
+        checkedAt = (Get-Date).ToString('o')
+    }
+    try {
+        New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
+        $script:DependencyState | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $DependencyStatus -Encoding UTF8
+    } catch {}
+}
+
 # 1 - DaVinci Resolve
 Step 1 'Checking DaVinci Resolve'
 $resolveExe = Join-Path $env:ProgramFiles 'Blackmagic Design\DaVinci Resolve\Resolve.exe'
@@ -251,6 +290,7 @@ if (Get-Process -Name 'Resolve', 'DaVinci Resolve Welcome' -ErrorAction Silently
     }
 }
 Ok 'Resolve found. (Workflow Integration Plugins require the Studio edition.)'
+Set-DependencyStatus 'required' 'resolve' 'installed' $resolveExe
 
 # 2 - Node.js 18+
 Step 2 'Checking Node.js'
@@ -260,7 +300,7 @@ Step 2 'Checking Node.js'
 function Sync-Path {
     $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
     $user    = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $env:Path = (@($machine, $user) | Where-Object { $_ }) -join ';'
+    $env:Path = (@($AppNpmPrefix, $AppPythonScripts, $machine, $user) | Where-Object { $_ }) -join ';'
     $nodeDir = Join-Path $env:ProgramFiles 'nodejs'
     if ((Test-Path $nodeDir) -and ($env:Path -notlike "*$nodeDir*")) {
         $env:Path = "$nodeDir;$env:Path"
@@ -354,67 +394,52 @@ if ($nodeMajor -lt 18) {
 }
 $nodeVer = (& node --version).Trim()
 Ok "Node.js $nodeVer"
+Set-DependencyStatus 'required' 'node' 'installed' $nodeVer
 
 # 3 - AI CLI
-Step 3 'Checking AI CLI'
-$haveClaude = [bool](Get-Command claude -ErrorAction SilentlyContinue)
-if (-not $haveClaude -and (Test-Path (Join-Path $env:APPDATA 'npm\claude.cmd'))) {
-    $haveClaude = $true
+Step 3 'Installing AI CLIs'
+function Test-AppCommand($name) {
+    return [bool](Get-Command $name -ErrorAction SilentlyContinue)
 }
-$haveCodex = [bool](Get-Command codex -ErrorAction SilentlyContinue)
-if (-not $haveCodex -and (Test-Path (Join-Path $env:APPDATA 'npm\codex.cmd'))) {
-    $haveCodex = $true
-}
-if (-not $haveClaude -and -not $haveCodex) {
-    Warn 'No supported AI CLI found.'
-    Write-Host '       Choose an AI CLI to install:' -ForegroundColor Gray
-    Write-Host '       [1] OpenAI Codex CLI (recommended)' -ForegroundColor White
-    Write-Host '       [2] Claude Code CLI' -ForegroundColor White
-    Write-Host '       [S] Skip for now' -ForegroundColor Gray
-    $choice = (Read-Host '       Selection').Trim().ToLowerInvariant()
-    if ([string]::IsNullOrWhiteSpace($choice)) { $choice = '1' }
-    $installAttempted = $false
-
-    if ($choice -eq '2') {
-        Warn 'Installing Claude Code CLI via npm...'
-        $installAttempted = $true
-        & npm install -g '@anthropic-ai/claude-code'
-    } elseif ($choice -eq 's') {
-        Warn 'Skipping AI CLI install. Install later with: npm install -g @openai/codex'
-    } else {
-        Warn 'Installing OpenAI Codex CLI via npm...'
-        $installAttempted = $true
-        & npm install -g '@openai/codex'
+function Install-AppNpmPackage($label, $packageName, $commandName) {
+    if (Test-AppCommand $commandName) {
+        Ok "$label CLI present."
+        Set-DependencyStatus 'providers' $commandName 'installed' 'Found on PATH.'
+        return $true
     }
-
-    if ($installAttempted -and $LASTEXITCODE -ne 0) {
-        Warn 'Automatic install failed. Install manually: npm install -g @openai/codex or npm install -g @anthropic-ai/claude-code'
-    } elseif ($choice -eq '2') {
-        Ok 'Claude Code CLI installed.'
-        $haveClaude = $true
-    } elseif ($choice -ne 's') {
-        Ok 'OpenAI Codex CLI installed.'
-        $haveCodex = $true
+    Warn "Installing $label CLI into Resolve AI tools..."
+    & npm install -g --prefix $AppNpmPrefix $packageName --no-audit --no-fund
+    if ($LASTEXITCODE -eq 0 -and (Test-AppCommand $commandName)) {
+        Ok "$label CLI installed."
+        Set-DependencyStatus 'providers' $commandName 'installed' $AppNpmPrefix
+        return $true
     }
-} else {
-    if ($haveClaude) { Ok 'Claude Code CLI present.' }
-    if ($haveCodex) { Ok 'OpenAI Codex CLI present.' }
+    Warn "$label CLI install failed. You can repair later from Settings > Setup."
+    Set-DependencyStatus 'providers' $commandName 'repair-failed' "npm install -g --prefix $AppNpmPrefix $packageName"
+    return $false
 }
+$haveCodex = Install-AppNpmPackage 'OpenAI Codex' '@openai/codex' 'codex'
+$haveClaude = Install-AppNpmPackage 'Claude Code' '@anthropic-ai/claude-code' 'claude'
 if ($haveClaude -and (Test-Path (Join-Path $env:USERPROFILE '.claude\.credentials.json'))) {
     Ok 'Claude Code appears logged in.'
+    Set-DependencyStatus 'providers' 'claudeLogin' 'installed' 'Claude credentials found.'
 } elseif ($haveCodex) {
     try {
         & codex login status *> $null
         if ($LASTEXITCODE -eq 0) {
             Ok 'OpenAI Codex CLI appears logged in.'
+            Set-DependencyStatus 'providers' 'codexLogin' 'installed' 'Codex login status OK.'
         } else {
             Warn 'OpenAI Codex CLI installed but not logged in - run codex login in terminal.'
+            Set-DependencyStatus 'providers' 'codexLogin' 'needs-login' 'Run codex login.'
         }
     } catch {
         Warn 'OpenAI Codex CLI installed but login status could not be checked - run codex login in terminal.'
+        Set-DependencyStatus 'providers' 'codexLogin' 'needs-login' 'Run codex login.'
     }
 } else {
     Warn 'Install or log in to at least one provider: claude login or codex login.'
+    Set-DependencyStatus 'providers' 'aiCli' 'repair-failed' 'No AI provider CLI available.'
 }
 
 # 4 - Renderer dependencies
@@ -425,6 +450,7 @@ $exit = $LASTEXITCODE
 Pop-Location
 if ($exit -ne 0) { Fail 'npm install failed in plugin\renderer.' }
 Ok 'Renderer dependencies installed.'
+Set-DependencyStatus 'required' 'rendererDependencies' 'installed' $RendererSrc
 
 $distIndex = Join-Path $PluginSrc 'dist\index.html'
 if (-not (Test-Path $distIndex)) {
@@ -492,6 +518,7 @@ $exit = $LASTEXITCODE
 Pop-Location
 if ($exit -ne 0) { Fail 'Playwright Chromium download failed.' }
 Ok 'Chromium installed.'
+Set-DependencyStatus 'required' 'playwrightChromium' 'installed' $env:PLAYWRIGHT_BROWSERS_PATH
 
 # 6 - ffmpeg
 Step 6 'Checking render dependencies'
@@ -507,9 +534,86 @@ if ($renderDepsExit -ne 0) {
     Fail 'Render dependency self-test failed. Re-run this installer with internet access so ffmpeg-static and Playwright can install, or install FFmpeg manually with: winget install Gyan.FFmpeg.'
 }
 Ok 'Render dependencies ready.'
+Set-DependencyStatus 'required' 'renderEngine' 'installed' 'ffmpeg-static / Playwright render self-test passed.'
 
-# 7 - Copy plugin into DaVinci Resolve (elevated — the only step that needs admin)
-Step 7 'Installing plugin into DaVinci Resolve'
+# 7 - Optional local engines
+Step 7 'Installing optional local engines'
+$pythonCmd = $null
+foreach ($candidate in @('py', 'python', 'python3')) {
+    if (Get-Command $candidate -ErrorAction SilentlyContinue) {
+        $pythonCmd = $candidate
+        break
+    }
+}
+if (-not $pythonCmd) {
+    Warn 'Python not found. Manim and Whisper are optional; install Python 3.11+ later from Settings > Setup.'
+    Set-DependencyStatus 'optional' 'python' 'not-installed' 'Python 3.11+ not found.'
+} else {
+    try {
+        if (-not (Test-Path (Join-Path $AppPythonScripts 'python.exe'))) {
+            Warn 'Creating Resolve AI local Python environment...'
+            & $pythonCmd -m venv $AppPythonVenv
+        }
+    } catch {
+        Warn "Could not create local Python environment: $($_.Exception.Message)"
+    }
+    $venvPython = Join-Path $AppPythonScripts 'python.exe'
+    if (-not (Test-Path $venvPython)) { $venvPython = $pythonCmd }
+    Set-DependencyStatus 'optional' 'python' 'installed' $venvPython
+    try {
+        & $venvPython -m pip install --upgrade pip *> $null
+    } catch {}
+
+    $manimReady = $false
+    try {
+        & $venvPython -m manim --version *> $null
+        $manimReady = ($LASTEXITCODE -eq 0)
+    } catch {
+        $manimReady = $false
+    }
+    if (-not $manimReady) {
+        Warn 'Installing Manim Community Edition into Resolve AI tools...'
+        & $venvPython -m pip install --upgrade manim
+        $manimReady = ($LASTEXITCODE -eq 0)
+    }
+    if ($manimReady) {
+        Ok 'Manim Community Edition ready.'
+        Set-DependencyStatus 'optional' 'manim' 'installed' $AppPythonVenv
+    } else {
+        Warn 'Manim install failed. Normal overlay generation still works.'
+        Set-DependencyStatus 'optional' 'manim' 'repair-failed' 'python -m pip install manim'
+    }
+
+    $whisperReady = $false
+    try {
+        & $venvPython -m whisper --help *> $null
+        $whisperReady = ($LASTEXITCODE -eq 0)
+    } catch {
+        $whisperReady = $false
+    }
+    if (-not $whisperReady) {
+        Warn 'Installing OpenAI Whisper into Resolve AI tools...'
+        & $venvPython -m pip install --upgrade openai-whisper
+        $whisperReady = ($LASTEXITCODE -eq 0)
+    }
+    if ($whisperReady) {
+        Ok 'Whisper ready.'
+        Set-DependencyStatus 'optional' 'whisper' 'installed' $AppPythonVenv
+    } else {
+        Warn 'Whisper install failed. SRT/VTT transcript import still works.'
+        Set-DependencyStatus 'optional' 'whisper' 'repair-failed' 'python -m pip install openai-whisper'
+    }
+
+    if ($manimReady -or $whisperReady) {
+        $venvActivate = Join-Path $AppPythonScripts 'Activate.ps1'
+        if (Test-Path $venvActivate) {
+            Write-Host "       local tools venv: $AppPythonVenv" -ForegroundColor DarkGray
+        }
+    }
+}
+
+# 8 - Copy plugin into DaVinci Resolve (elevated — the only step that needs admin)
+Step 8 'Installing plugin into DaVinci Resolve'
 if (-not (Test-Admin)) {
     Write-Host '       (Windows will ask for administrator approval to copy the plugin)' -ForegroundColor DarkGray
 }
@@ -517,9 +621,10 @@ if (-not (Copy-Plugin)) {
     Fail 'Could not copy the plugin into DaVinci Resolve (the administrator prompt may have been declined, or the copy failed).'
 }
 Ok "Installed to $Dest"
+Set-DependencyStatus 'required' 'pluginCopy' 'installed' $Dest
 
-# 8 - Verify
-Step 8 'Verifying installation'
+# 9 - Verify
+Step 9 'Verifying installation'
 $required = @(
     'manifest.xml',
     'main.js',
@@ -553,9 +658,10 @@ foreach ($rel in $required) {
     }
 }
 Ok 'All required files present.'
+Set-DependencyStatus 'required' 'pluginVerification' 'installed' $Dest
 
-# 9 - Done
-Step 9 'Done'
+# 10 - Done
+Step 10 'Done'
 Stop-InstallLog
 Show-Success
 Read-Host '       Press Enter to exit'

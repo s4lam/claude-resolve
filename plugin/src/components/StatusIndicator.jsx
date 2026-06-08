@@ -24,13 +24,17 @@ const MODEL_LABELS = {
     sonnet: 'Sonnet',
     opus: 'Opus',
     haiku: 'Haiku',
-    default: 'Codex default',
-    'gpt-5.3-codex': 'GPT-5.3 Codex',
+    default: 'GPT-5.5',
     'gpt-5.4-mini': 'GPT-5.4 Mini',
     'gpt-5.5': 'GPT-5.5'
 };
 
 const PROVIDER_LABELS = { auto: 'Auto', claude: 'Claude', codex: 'Codex' };
+
+function displayModel(model) {
+    if (model === 'gpt-5.3-codex') return MODEL_LABELS['gpt-5.5'];
+    return MODEL_LABELS[model] || model;
+}
 
 export default function StatusIndicator({ tool, tokens, model, provider }) {
     const [elapsed, setElapsed] = useState(0);
@@ -48,7 +52,7 @@ export default function StatusIndicator({ tool, tokens, model, provider }) {
     if (elapsed > 0) parts.push(`${elapsed}s`);
     if (provider) parts.push(PROVIDER_LABELS[provider] || provider);
     if (tokens > 0) parts.push(`${tokens} tokens`);
-    if (model) parts.push(MODEL_LABELS[model] || model);
+    if (model) parts.push(displayModel(model));
     if (tool) {
         const action = TOOL_LABELS[tool.name] || tool.name;
         const file = shortPath(tool.file);

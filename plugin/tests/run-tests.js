@@ -12,6 +12,7 @@ async function run() {
     require('./render-validation.test');
     require('./render-health.test');
     require('./render-settings.test');
+    require('./renderer.test');
     require('./resolve-reliability.test');
     require('./ograph.test');
     require('./manim.test');

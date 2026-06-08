@@ -8,8 +8,7 @@ const { addLog } = require('./agent-logs');
 const { cleanCodexStderr, isNoisyCodexStderr } = require('./codex-stderr-filter');
 
 const MODEL_IDS = {
-    default: null,
-    'gpt-5.3-codex': 'gpt-5.3-codex',
+    default: 'gpt-5.5',
     'gpt-5.4-mini': 'gpt-5.4-mini',
     'gpt-5.5': 'gpt-5.5'
 };
@@ -63,10 +62,18 @@ function buildCodexArgs({ threadId: currentThreadId, modelId }) {
         ? ['exec', 'resume', '--ignore-user-config', '--json', '--skip-git-repo-check']
         : ['exec', '--ignore-user-config', '--json', '--skip-git-repo-check', '--sandbox', 'read-only'];
 
-    if (modelId && !currentThreadId) args.push('--model', modelId);
+    if (modelId) args.push('--model', modelId);
     if (currentThreadId) args.push(currentThreadId);
     args.push('-');
     return args;
+}
+
+function normalizeCodexModelId(value) {
+    return Object.prototype.hasOwnProperty.call(MODEL_IDS, value) ? value : 'default';
+}
+
+function resolveCodexModelId(value) {
+    return MODEL_IDS[normalizeCodexModelId(value)];
 }
 
 function isStaleCodexResumeError(text) {
@@ -76,6 +83,13 @@ function isStaleCodexResumeError(text) {
         && /thread id/i.test(message);
 }
 
+function isUnsupportedCodexDefaultModelError(text) {
+    const message = String(text || '');
+    return /gpt-5\.3-codex/i.test(message)
+        && /not supported/i.test(message)
+        && /ChatGPT account/i.test(message);
+}
+
 function spawnCodex(prompt, options = {}) {
     if (codexProcess) {
         emit('stderr', 'Codex is already running.');
@@ -83,7 +97,8 @@ function spawnCodex(prompt, options = {}) {
     }
 
     const config = readConfig();
-    const modelId = MODEL_IDS[config.codexModel || 'default'];
+    const codexModel = normalizeCodexModelId(config.codexModel || 'default');
+    const modelId = resolveCodexModelId(codexModel);
     const resumeThreadId = options.forceFresh ? null : threadId;
     const args = buildCodexArgs({ threadId: resumeThreadId, modelId });
 
@@ -91,7 +106,7 @@ function spawnCodex(prompt, options = {}) {
     let stderrBuffer = '';
     let shouldRetryFreshOnClose = false;
     isAborting = false;
-    emit('status', { type: 'provider', provider: 'codex', model: config.codexModel || 'default', threadId: resumeThreadId });
+    emit('status', { type: 'provider', provider: 'codex', model: codexModel, threadId: resumeThreadId });
 
     const parser = createCodexJsonlParser({
         stdout: data => {
@@ -110,6 +125,13 @@ function spawnCodex(prompt, options = {}) {
         status: data => {
             if (data.threadId) threadId = data.threadId;
             emit('status', data);
+        },
+        recoverableError: message => {
+            if (resumeThreadId && (isStaleCodexResumeError(message) || isUnsupportedCodexDefaultModelError(message))) {
+                shouldRetryFreshOnClose = true;
+                return true;
+            }
+            return false;
         },
         done: code => emit('done', code)
     }, { threadId: resumeThreadId });
@@ -142,11 +164,12 @@ function spawnCodex(prompt, options = {}) {
         if (
             resumeThreadId
             && !isAborting
-            && (shouldRetryFreshOnClose || (!parser.state.completed && isStaleCodexResumeError(stderrBuffer)))
+            && (shouldRetryFreshOnClose
+                || (!parser.state.completed && (isStaleCodexResumeError(stderrBuffer) || isUnsupportedCodexDefaultModelError(stderrBuffer))))
         ) {
-            addLog('codex', 'stderr', `Codex resume thread expired (${resumeThreadId}); retrying fresh turn.`, { level: 'warning' });
+            addLog('codex', 'stderr', `Codex resume thread could not continue (${resumeThreadId}); retrying fresh turn.`, { level: 'warning' });
             threadId = null;
-            emit('status', { type: 'warning', message: 'Codex session expired. Retrying as a fresh turn.' });
+            emit('status', { type: 'warning', message: 'Codex session could not continue. Retrying as a fresh turn.' });
             spawnCodex(prompt, { forceFresh: true });
             return;
         }
@@ -239,6 +262,9 @@ module.exports = {
     handleCodexStart,
     getCodexThreadId,
     buildCodexArgs,
+    normalizeCodexModelId,
+    resolveCodexModelId,
     isStaleCodexResumeError,
+    isUnsupportedCodexDefaultModelError,
     cleanupCodex
 };

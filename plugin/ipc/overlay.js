@@ -146,7 +146,7 @@ async function findEmptyTrack(timeline, atFrame, clipFrames) {
     return trackCount + 1;
 }
 
-async function importToTimeline(movPath) {
+async function importToTimeline(movPath, options = {}) {
     const resolve = await getResolve();
     if (!resolve) return { imported: false, placed: false, reason: 'Resolve is not connected' };
 
@@ -173,12 +173,14 @@ async function importToTimeline(movPath) {
         const fpsStr = await timeline.GetSetting('timelineFrameRate');
         const fps = parseFloat(fpsStr) || 25;
         const playheadFrame = timecodeToFrame(tc, fps);
+        const requestedRecordFrame = Number(options.placementRecordFrame);
+        const recordFrame = Number.isFinite(requestedRecordFrame) ? Math.round(requestedRecordFrame) : playheadFrame;
 
         const clip = clips[0];
         const clipProps = await clip.GetClipProperty();
         const clipFrames = parseInt(clipProps.Frames, 10) || Math.round(fps * 5);
 
-        const trackIndex = await findEmptyTrack(timeline, playheadFrame, clipFrames);
+        const trackIndex = await findEmptyTrack(timeline, recordFrame, clipFrames);
 
         let startFrame = null;
         let endFrame = null;
@@ -190,7 +192,7 @@ async function importToTimeline(movPath) {
         const appended = await mediaPool.AppendToTimeline([{
             mediaPoolItem: clip,
             trackIndex,
-            recordFrame: playheadFrame,
+            recordFrame,
             mediaType: 1
         }]);
 
@@ -198,7 +200,9 @@ async function importToTimeline(movPath) {
         console.log('IMPORT PLACEMENT:', JSON.stringify({
             timecode: tc,
             fps,
-            recordFrame: playheadFrame,
+            playheadFrame,
+            recordFrame,
+            placementReference: options.placementReference || '',
             trackIndex,
             timelineStartFrame: startFrame,
             timelineEndFrame: endFrame,
@@ -210,10 +214,10 @@ async function importToTimeline(movPath) {
             return {
                 imported: true,
                 placed: false,
-                reason: `Resolve rejected placement on track V${trackIndex} at frame ${playheadFrame}`
+                reason: `Resolve rejected placement on track V${trackIndex} at frame ${recordFrame}`
             };
         }
-        return { imported: true, placed: true, track: trackIndex };
+        return { imported: true, placed: true, track: trackIndex, recordFrame };
     } catch (err) {
         return { imported: true, placed: false, reason: err.message || 'timeline placement failed' };
     }
@@ -307,6 +311,7 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
         let buf = '';
         let stderrBuf = '';
         let renderMessages = [];
+        let renderInfo = {};
         let sawRenderOutput = false;
         let settled = false;
 
@@ -327,6 +332,9 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
                     const msg = JSON.parse(line);
                     if (msg?.type === 'error' || msg?.type === 'warning') {
                         renderMessages.push(msg);
+                    }
+                    if (msg?.type === 'start' || msg?.type === 'done') {
+                        renderInfo = { ...renderInfo, ...msg };
                     }
                     mainWindow.webContents.send('overlay:renderProgress', msg);
                 } catch (_e) { /* ignore non-JSON */ }
@@ -366,12 +374,19 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
                 fps,
                 width,
                 height,
+                duration: renderInfo.encodedDuration || renderInfo.duration || metadata?.duration || null,
+                requestedDuration: renderInfo.duration || metadata?.requestedDuration || null,
+                encodedDuration: renderInfo.encodedDuration || null,
+                totalFrames: renderInfo.totalFrames || null,
                 renderSettings: normalizedRender,
                 proxyPath: proxyPath && fs.existsSync(proxyPath) ? proxyPath : null,
                 size: fs.existsSync(outputPath) ? fs.statSync(outputPath).size : null,
                 createdAt: metadata?.createdAt || new Date().toISOString()
             });
-            const timelineResult = await importToTimeline(outputPath);
+            const timelineResult = await importToTimeline(outputPath, {
+                placementRecordFrame: metadata?.placementRecordFrame,
+                placementReference: metadata?.placementReference
+            });
             setLastRenderError(null);
             resolve({
                 success: true,
@@ -381,6 +396,7 @@ async function handleRenderMov(_event, { html, name, fps, width, height, renderS
                 imported: !!timelineResult.imported,
                 placed: !!timelineResult.placed,
                 track: timelineResult.track || null,
+                recordFrame: timelineResult.recordFrame ?? null,
                 placementReason: timelineResult.reason || '',
                 warning: timelineResult.placed
                     ? ''

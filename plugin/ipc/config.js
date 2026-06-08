@@ -4,6 +4,7 @@ const { CONFIG_DIR } = require('./paths');
 const { applyRenderPreset, normalizeRenderSettings } = require('./render-settings');
 
 const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
+const SUPPORTED_CODEX_MODELS = new Set(['default', 'gpt-5.4-mini', 'gpt-5.5']);
 const DEFAULT_BRAND_KIT = {
     colors: '',
     fonts: '',
@@ -16,7 +17,7 @@ const DEFAULTS = {
     provider: 'auto',
     model: 'sonnet',
     effort: 'auto',
-    codexModel: 'default',
+    codexModel: 'gpt-5.5',
     fps: 25,
     width: 1920,
     height: 1080,
@@ -88,10 +89,17 @@ function mergeRenderSettings(base = {}, patch = {}) {
     return normalizeRenderSettings({ ...base, ...expandedPatch });
 }
 
+function normalizeCodexModel(value) {
+    const model = String(value || DEFAULTS.codexModel);
+    if (model === 'default') return DEFAULTS.codexModel;
+    return SUPPORTED_CODEX_MODELS.has(model) ? model : DEFAULTS.codexModel;
+}
+
 function mergeConfig(parsed = {}) {
     return {
         ...DEFAULTS,
         ...parsed,
+        codexModel: normalizeCodexModel(parsed.codexModel),
         brandKit: { ...DEFAULT_BRAND_KIT, ...(parsed.brandKit || {}) },
         selectedAssetIds: Array.isArray(parsed.selectedAssetIds) ? parsed.selectedAssetIds : [],
         generation: {
@@ -131,6 +139,7 @@ function writeConfig(partial) {
     const config = {
         ...current,
         ...partial,
+        codexModel: normalizeCodexModel(partial.codexModel || current.codexModel),
         brandKit: { ...DEFAULT_BRAND_KIT, ...(current.brandKit || {}), ...(partial.brandKit || {}) },
         selectedAssetIds: Array.isArray(partial.selectedAssetIds) ? partial.selectedAssetIds : current.selectedAssetIds,
         generation: {
@@ -170,4 +179,4 @@ function setupConfigHandlers(ipcMain) {
     ipcMain.handle('brand:set', (_e, brandKit) => writeConfig({ brandKit }).brandKit);
 }
 
-module.exports = { setupConfigHandlers, readConfig, writeConfig, mergeConfig, DEFAULT_BRAND_KIT };
+module.exports = { setupConfigHandlers, readConfig, writeConfig, mergeConfig, normalizeCodexModel, DEFAULT_BRAND_KIT };

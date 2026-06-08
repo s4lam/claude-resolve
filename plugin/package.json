@@ -1,6 +1,6 @@
 {
     "name": "resolve-ai",
-  "version": "0.6.1-beta",
+  "version": "0.6.2-beta",
     "description": "AI-powered motion graphics generator and assistant for DaVinci Resolve",
     "main": "main.js",
     "scripts": {

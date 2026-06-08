@@ -73,11 +73,12 @@ function writeReleaseMetadata() {
         generatedAt: new Date().toISOString(),
         assets: zipNames,
         install: {
-            windows: 'Double-click install.bat from the extracted ResolveAI-Windows ZIP.',
-            macOS: 'Double-click install.command from the extracted ResolveAI-macOS ZIP.',
+            windows: 'Double-click Install Resolve AI.bat from the extracted ResolveAI-Windows ZIP.',
+            macOS: 'Double-click Install Resolve AI.command from the extracted ResolveAI-macOS ZIP.',
             warning: 'Download ResolveAI-...zip from GitHub Releases, not GitHub Source code.zip.'
         },
         required: [
+            'START HERE.txt',
             'plugin/manifest.xml',
             'plugin/main.js',
             'plugin/preload.js',
@@ -89,27 +90,41 @@ function writeReleaseMetadata() {
             'plugin/scripts/check-render-deps.js',
             'plugin/updater/install-update.ps1',
             'plugin/updater/install-update.sh',
-            'install.bat',
-            'install.ps1',
-            'install.sh',
-            'install.command',
+            'installer/release-manifest.json',
+            'installer/install.ps1',
+            'installer/install.sh',
+            'installer/README.md',
             'Install Resolve AI.bat',
             'Install Resolve AI.command'
         ]
     };
-    fs.writeFileSync(path.join(stageDir, 'release-manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
-    fs.writeFileSync(path.join(stageDir, 'INSTALL-FIRST.txt'), [
+    fs.mkdirSync(path.join(stageDir, 'installer'), { recursive: true });
+    fs.writeFileSync(path.join(stageDir, 'installer', 'release-manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
+    fs.writeFileSync(path.join(stageDir, 'START HERE.txt'), [
         'Resolve AI installer',
         '',
         'Use this release ZIP, not GitHub Source code.zip.',
         '',
         'Windows:',
-        '  Double-click install.bat',
+        '  Double-click Install Resolve AI.bat',
         '',
         'macOS:',
-        '  Double-click install.command',
+        '  Double-click Install Resolve AI.command',
+        '',
+        'Internal installer scripts live in the installer folder. Normal users should not run them directly.',
         '',
         'After install, open DaVinci Resolve > Workspace > Workflow Integration > Resolve AI.',
+        ''
+    ].join('\n'), 'utf8');
+    fs.writeFileSync(path.join(stageDir, 'installer', 'README.md'), [
+        '# Resolve AI installer internals',
+        '',
+        'Use the root launchers instead:',
+        '',
+        '- Windows: `Install Resolve AI.bat`',
+        '- macOS: `Install Resolve AI.command`',
+        '',
+        '`install.ps1` and `install.sh` contain the real platform install logic and are called by the launchers.',
         ''
     ].join('\n'), 'utf8');
 }
@@ -138,21 +153,30 @@ fs.mkdirSync(stageDir, { recursive: true });
 ensureBuiltinTemplatePack();
 runPluginBuild();
 
-for (const item of ['plugin', 'community-templates', 'screenshots', 'docs']) {
+for (const item of ['plugin']) {
     const source = path.join(root, item);
     if (fs.existsSync(source)) copyRecursive(source, path.join(stageDir, item));
 }
 
-for (const file of ['README.md', 'CONTRIBUTING.md', 'RELEASE_NOTES.md', 'LICENSE', 'install.bat', 'install.ps1', 'install.sh', 'install.command', 'Install Resolve AI.bat', 'Install Resolve AI.command']) {
+for (const file of ['README.md', 'RELEASE_NOTES.md', 'LICENSE', 'Install Resolve AI.bat', 'Install Resolve AI.command']) {
     const source = path.join(root, file);
     if (fs.existsSync(source)) copyRecursive(source, path.join(stageDir, file));
+}
+
+for (const file of ['install.ps1', 'install.sh']) {
+    const source = path.join(root, 'installer', file);
+    if (fs.existsSync(source)) copyRecursive(source, path.join(stageDir, 'installer', file));
 }
 
 writeReleaseMetadata();
 execFileSync(process.execPath, [path.join(root, 'scripts', 'validate-release-package.js'), stageDir], { stdio: 'inherit' });
 
-for (const zipName of zipNames) {
-    fs.rmSync(path.join(outDir, zipName), { force: true });
+if (fs.existsSync(outDir)) {
+    for (const entry of fs.readdirSync(outDir)) {
+        if (/^ResolveAI-.*\.zip$/i.test(entry)) {
+            fs.rmSync(path.join(outDir, entry), { force: true });
+        }
+    }
 }
 
 function createZip(zipName) {

@@ -20,6 +20,9 @@ function createCodexJsonlParser(callbacks = {}, state = {}) {
     }
 
     function fail(message) {
+        if (typeof callbacks.recoverableError === 'function' && callbacks.recoverableError(message)) {
+            return;
+        }
         parserState.failed = true;
         if (message) emit('stderr', message);
         if (!parserState.completed) {

@@ -25,12 +25,11 @@ const REQUIRED_PLUGIN_FILES = [
     path.join('updater', 'install-update.sh')
 ];
 const REQUIRED_RELEASE_FILES = [
-    'release-manifest.json',
-    'INSTALL-FIRST.txt',
-    'install.bat',
-    'install.ps1',
-    'install.sh',
-    'install.command',
+    'START HERE.txt',
+    path.join('installer', 'release-manifest.json'),
+    path.join('installer', 'install.ps1'),
+    path.join('installer', 'install.sh'),
+    path.join('installer', 'README.md'),
     'Install Resolve AI.bat',
     'Install Resolve AI.command'
 ];

@@ -74,10 +74,10 @@ function handleAgentHealth() {
     return {
         configuredProvider: config.provider || 'auto',
         activeProvider: active,
-        activeModel: active === 'codex' ? (config.codexModel || 'default') : (config.model || 'sonnet'),
+        activeModel: active === 'codex' ? (config.codexModel || 'gpt-5.5') : (config.model || 'sonnet'),
         providers: {
             claude: { ...claudeStatus, model: config.model || 'sonnet' },
-            codex: { ...codexStatus, model: config.codexModel || 'default', threadId: codex.getCodexThreadId() }
+            codex: { ...codexStatus, model: config.codexModel || 'gpt-5.5', threadId: codex.getCodexThreadId() }
         },
         logs: getLogSummary()
     };

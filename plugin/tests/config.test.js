@@ -8,6 +8,7 @@ const merged = mergeConfig({
 });
 
 assert.strictEqual(merged.provider, 'codex');
+assert.strictEqual(mergeConfig({ codexModel: 'gpt-5.3-codex' }).codexModel, 'gpt-5.5');
 assert.strictEqual(merged.brandKit.colors, '#fff');
 assert.strictEqual(merged.brandKit.fonts, '');
 assert.strictEqual(merged.ui.rawLogsOpen, false);

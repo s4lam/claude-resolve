@@ -6,12 +6,23 @@ const {
   detectManim,
   extractPythonSource,
   firstLine,
+  formatManimRenderError,
   getManimStarterScenes,
   probeFirst,
   validateManimSource
 } = require('../ipc/manim');
 
 assert.strictEqual(firstLine('\nManim Community v0.19.0\nextra'), 'Manim Community v0.19.0');
+assert.strictEqual(
+  formatManimRenderError(`+--------------------- Traceback (most recent call last) ---------------------+
+File "scene.py", line 12
+NameError: name 'BadClass' is not defined`),
+  "NameError: name 'BadClass' is not defined"
+);
+assert.strictEqual(
+  formatManimRenderError('', 'FileNotFoundError: [WinError 2] The system cannot find the file specified'),
+  'Missing helper executable: The system cannot find the file specified. Bundled FFmpeg is added automatically; if this source uses Tex or MathTex, regenerate it with Text instead.'
+);
 
 const ready = detectManim({}, (command, args) => {
   if (command === 'manim' && args[0] === '--version') {
@@ -48,7 +59,8 @@ const installCommand = buildManimInstallCommand({
   python: { installed: true, command: 'python3' }
 });
 assert.strictEqual(installCommand.success, true);
-assert.ok(installCommand.command.includes('-m pip install manim'));
+assert.ok(installCommand.command.includes('-m pip install --upgrade manim'));
+assert.ok(installCommand.command.includes('openai-whisper'));
 
 const installWithoutPython = buildManimInstallCommand({
   python: { installed: false, command: '' }
@@ -74,6 +86,9 @@ const prompt = buildManimPrompt({
 assert.ok(prompt.prompt.includes('ResolveAIManimScene'));
 assert.ok(prompt.prompt.includes('1080x1920'));
 assert.ok(prompt.prompt.includes('no network calls'));
+assert.ok(prompt.prompt.includes('Do not use Tex, MathTex'));
+assert.ok(prompt.prompt.includes('10% margin'));
+assert.ok(prompt.prompt.includes('scale_to_fit_width'));
 assert.ok(prompt.prompt.includes('gold typography'));
 assert.strictEqual(prompt.safeMode, true);
 
@@ -104,6 +119,10 @@ assert.ok(unsafe.errors.some(error => error.includes('os')));
 const noClass = validateManimSource('from manim import *\\nclass Other(Scene): pass');
 assert.strictEqual(noClass.valid, false);
 assert.ok(noClass.errors.some(error => error.includes('ResolveAIManimScene')));
+
+const latexSource = validateManimSource('from manim import *\\nclass ResolveAIManimScene(Scene):\\n    def construct(self):\\n        self.play(Write(MathTex(\"x^2\")))');
+assert.strictEqual(latexSource.valid, false);
+assert.ok(latexSource.errors.some(error => error.includes('LaTeX')));
 
 const renderArgs = buildRenderArgs('scene.py', 'media', { width: 1080, height: 1920, fps: 60, quality: 'medium', name: 'My Scene' }, ready);
 assert.strictEqual(renderArgs.command, ready.renderCommand.command);

@@ -63,6 +63,7 @@ const RENDER_PRESETS = {
         }
     }
 };
+const CODEX_MODEL_VALUES = new Set(['default', 'gpt-5.4-mini', 'gpt-5.5']);
 
 function statusLabel(state) {
     return STATUS_LABELS[state] || String(state || 'unknown').replace(/-/g, ' ');
@@ -73,6 +74,11 @@ function presetIdForRenderSettings(settings = {}) {
     if (settings.outputFormat === 'hevc_nvenc_hq') return 'mp4_gpu_quality';
     if (settings.outputFormat === 'h264') return 'mp4_cpu_quality';
     return 'prores_mov';
+}
+
+function normalizeCodexModelValue(value) {
+    if (value === 'default') return 'gpt-5.5';
+    return CODEX_MODEL_VALUES.has(value) ? value : 'gpt-5.5';
 }
 
 function SettingsHeader({ provider, model, onShowTools, onClose }) {
@@ -375,6 +381,17 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
         setTimeout(() => setSetupStatus(''), 2600);
     }
 
+    async function handleRepairEverything() {
+        setSetupStatus('Opening repair');
+        try {
+            const result = await window.updatesAPI?.openSetupRepair?.();
+            setSetupStatus(result?.success ? 'Repair terminal opened' : 'Repair unavailable');
+        } catch {
+            setSetupStatus('Repair unavailable');
+        }
+        setTimeout(() => setSetupStatus(''), 3000);
+    }
+
     async function handleOpenManimInstall() {
         setSetupStatus('Opening installer');
         try {
@@ -544,7 +561,7 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
 
     const provider = config.provider || 'auto';
     const claudeModelValue = SELECTORS.models.some(m => m.value === config.model) ? config.model : 'sonnet';
-    const modelValue = provider === 'codex' ? (config.codexModel || 'default') : claudeModelValue;
+    const modelValue = provider === 'codex' ? normalizeCodexModelValue(config.codexModel || 'gpt-5.5') : claudeModelValue;
     const activeProvider = health?.activeProvider || provider;
     const activeModel = health?.activeModel || modelValue;
     const versionText = update?.current ? `v${update.current}` : 'Resolve AI';
@@ -663,11 +680,16 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
                     <div className="setup-overview">
                         <div>
                             <strong>{requiredReadyCount === requiredSetupItems.length ? 'Ready for normal use' : 'Needs setup'}</strong>
-                            <span>Core generation needs an AI provider and the render engine. Manim and local transcription are optional.</span>
+                            <span>Core generation needs an AI provider and the render engine. Repair can install Codex, Claude, Manim, and Whisper into Resolve AI tools.</span>
                         </div>
-                        <button className="settings-small-btn" onClick={handleCopySetupDiagnostics}>
-                            {setupStatus || 'Copy setup diagnostics'}
-                        </button>
+                        <div className="settings-button-stack">
+                            <button className="settings-small-btn primary" onClick={handleRepairEverything}>
+                                Install / Repair Everything
+                            </button>
+                            <button className="settings-small-btn" onClick={handleCopySetupDiagnostics}>
+                                {setupStatus || 'Copy setup diagnostics'}
+                            </button>
+                        </div>
                     </div>
                     <div className="setup-checklist" aria-label="Required setup">
                         {requiredSetupItems.map(item => (
@@ -715,10 +737,8 @@ export default function SidebarSettings({ config, onConfigChange, onShowTools, o
                         >
                             {provider === 'codex' ? (
                                 <>
-                                    <option value="default">Codex default</option>
-                                    <option value="gpt-5.3-codex">GPT-5.3 Codex</option>
+                                    <option value="gpt-5.5">GPT-5.5 · recommended</option>
                                     <option value="gpt-5.4-mini">GPT-5.4 Mini</option>
-                                    <option value="gpt-5.5">GPT-5.5</option>
                                 </>
                             ) : (
                                 SELECTORS.models.map(m => (

@@ -23,6 +23,11 @@ const THUMBNAIL_DIR = path.join(RENDER_DIR, 'thumbnails');
 
 // Plugin config directory
 const CONFIG_DIR = path.join(RESOLVE_DATA, 'Claude Resolve');
+const TOOLS_DIR = path.join(CONFIG_DIR, 'tools');
+const APP_NPM_PREFIX = path.join(TOOLS_DIR, 'npm');
+const APP_NPM_BIN = isMac ? path.join(APP_NPM_PREFIX, 'bin') : APP_NPM_PREFIX;
+const APP_PYTHON_VENV = path.join(TOOLS_DIR, 'python');
+const APP_PYTHON_BIN = isMac ? path.join(APP_PYTHON_VENV, 'bin') : path.join(APP_PYTHON_VENV, 'Scripts');
 
 // User-provided images/SVGs copied into local Resolve AI storage.
 const ASSET_DIR = path.join(CONFIG_DIR, 'assets');
@@ -51,6 +56,7 @@ function findExecutable(candidates, verifyCmd) {
 // (`zsh -lic`) which sources the user's rc files and so sees nvm / fnm /
 // Homebrew installs the static list can't enumerate.
 const CLAUDE_CANDIDATES = [
+    path.join(APP_NPM_BIN, isMac ? 'claude' : 'claude.cmd'),
     '/usr/local/bin/claude',
     '/opt/homebrew/bin/claude',
     path.join(os.homedir(), '.claude', 'local', 'claude'),
@@ -67,6 +73,7 @@ const CLAUDE_VERIFY_CMD = "zsh -lic 'command -v claude' 2>/dev/null";
 
 const CODEX_CANDIDATES = isMac
     ? [
+        path.join(APP_NPM_BIN, 'codex'),
         '/usr/local/bin/codex',
         '/opt/homebrew/bin/codex',
         path.join(os.homedir(), '.codex', 'local', 'codex'),
@@ -77,6 +84,8 @@ const CODEX_CANDIDATES = isMac
         'codex'
     ]
     : [
+        path.join(APP_NPM_BIN, 'codex.cmd'),
+        path.join(APP_NPM_BIN, 'codex.exe'),
         path.join(process.env.APPDATA || '', 'npm', 'codex.cmd'),
         path.join(process.env.LOCALAPPDATA || '', 'npm', 'codex.cmd'),
         path.join(process.env.APPDATA || '', 'npm', 'codex'),
@@ -91,6 +100,8 @@ const CODEX_VERIFY_CMD = isMac ? "zsh -lic 'command -v codex' 2>/dev/null" : 'wh
 // Volta can move the CLI off the default %APPDATA%\npm path, so try `where
 // claude` plus a candidate list there too.
 const WIN_CLAUDE_CANDIDATES = [
+    path.join(APP_NPM_BIN, 'claude.cmd'),
+    path.join(APP_NPM_BIN, 'claude.exe'),
     path.join(process.env.APPDATA || '', 'npm', 'claude.cmd'),
     path.join(process.env.LOCALAPPDATA || '', 'npm', 'claude.cmd'),
     path.join(os.homedir(), '.volta', 'bin', 'claude.exe'),
@@ -115,6 +126,8 @@ const CODEX_PATH = findCodexPath();
 
 const NODE_CANDIDATES = isMac
     ? [
+        path.join(APP_NPM_BIN, 'node'),
+        path.join(APP_PYTHON_BIN, 'node'),
         '/opt/homebrew/bin/node',
         '/usr/local/bin/node',
         '/usr/bin/node',
@@ -125,6 +138,8 @@ const NODE_CANDIDATES = isMac
         'node'
     ]
     : [
+        path.join(APP_NPM_BIN, 'node.exe'),
+        path.join(APP_NPM_BIN, 'node.cmd'),
         path.join(process.env.PROGRAMFILES || '', 'nodejs', 'node.exe'),
         path.join(process.env['ProgramFiles(x86)'] || '', 'nodejs', 'node.exe'),
         path.join(os.homedir(), '.volta', 'bin', 'node.exe'),
@@ -139,22 +154,24 @@ const NODE_PATH = findExecutable(NODE_CANDIDATES, NODE_VERIFY_CMD);
 // CLI's own bin dir plus the common Homebrew/Node locations so `claude`
 // (a `#!/usr/bin/env node` script) and anything it shells out to resolve.
 function buildEnv() {
-    if (!isMac) return process.env;
     const claudeDir = path.dirname(CLAUDE_PATH);
     const codexDir = path.dirname(CODEX_PATH);
     const nodeDir = path.dirname(NODE_PATH);
     const prepend = [
+        APP_NPM_BIN,
+        APP_PYTHON_BIN,
         (claudeDir && claudeDir !== '.') ? claudeDir : null,
         (codexDir && codexDir !== '.') ? codexDir : null,
         (nodeDir && nodeDir !== '.') ? nodeDir : null,
-        '/usr/local/bin',
-        '/opt/homebrew/bin'
+        isMac ? '/usr/local/bin' : null,
+        isMac ? '/opt/homebrew/bin' : null
     ].filter(Boolean);
     const merged = [];
-    for (const dir of [...prepend, ...(process.env.PATH || '').split(':')]) {
+    const delimiter = path.delimiter;
+    for (const dir of [...prepend, ...(process.env.PATH || '').split(delimiter)]) {
         if (dir && !merged.includes(dir)) merged.push(dir);
     }
-    return { ...process.env, PATH: merged.join(':') };
+    return { ...process.env, PATH: merged.join(delimiter) };
 }
 const ENV = buildEnv();
 
@@ -199,6 +216,11 @@ module.exports = {
     THUMBNAIL_DIR,
     CONFIG_DIR,
     ASSET_DIR,
+    TOOLS_DIR,
+    APP_NPM_PREFIX,
+    APP_NPM_BIN,
+    APP_PYTHON_VENV,
+    APP_PYTHON_BIN,
     FFMPEG_CANDIDATES,
     FFMPEG_VERIFY_CMD,
     PLAYWRIGHT_BROWSERS_PATH

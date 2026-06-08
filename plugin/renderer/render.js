@@ -321,6 +321,19 @@ function normalizedThreads(value) {
     return Number.isFinite(threads) && threads > 0 ? String(Math.min(32, threads)) : null;
 }
 
+function computeFramePlan(duration, fps) {
+    const safeDuration = Number(duration);
+    const safeFps = Number(fps);
+    if (!Number.isFinite(safeDuration) || safeDuration <= 0 || !Number.isFinite(safeFps) || safeFps <= 0) {
+        return { totalFrames: 0, encodedDuration: 0 };
+    }
+    const totalFrames = Math.max(1, Math.ceil((safeDuration * safeFps) - 1e-6));
+    return {
+        totalFrames,
+        encodedDuration: totalFrames / safeFps
+    };
+}
+
 function proresProfileValue(value) {
     return String(value || '').toLowerCase() === '4444xq' ? '4444xq' : '4444';
 }
@@ -522,7 +535,7 @@ async function main() {
             clamped = true;
         }
 
-        const totalFrames = Math.floor(duration * args.fps);
+        const { totalFrames, encodedDuration } = computeFramePlan(duration, args.fps);
         if (totalFrames <= 0) {
             emit({ type: 'error', message: `Computed 0 frames (duration=${duration}, fps=${args.fps})` });
             process.exit(1);
@@ -534,7 +547,7 @@ async function main() {
             emit({ type: 'warning', message: `duration clamped to ${MAX_DURATION_SEC}s` });
         }
 
-        emit({ type: 'start', totalFrames, duration, mode });
+        emit({ type: 'start', totalFrames, duration, encodedDuration, mode });
 
         if (mode === 'frame') {
             await renderFrameMode(page, args, framesDir, totalFrames);
@@ -595,20 +608,28 @@ async function main() {
             }
         }
 
-        emit({ type: 'done', output: args.output });
+        emit({ type: 'done', output: args.output, totalFrames, duration, encodedDuration });
     } finally {
         fs.rmSync(framesDir, { recursive: true, force: true });
     }
 }
 
-main()
-    .then(() => {
-        // Exit explicitly — Playwright/Electron-as-Node can leave the event
-        // loop alive after browser.close(), so a natural return would hang
-        // the parent process (which waits on the 'close' event).
-        process.exit(0);
-    })
-    .catch((err) => {
-        emit({ type: 'error', message: err && err.message ? err.message : String(err) });
-        process.exit(1);
-    });
+if (require.main === module) {
+    main()
+        .then(() => {
+            // Exit explicitly — Playwright/Electron-as-Node can leave the event
+            // loop alive after browser.close(), so a natural return would hang
+            // the parent process (which waits on the 'close' event).
+            process.exit(0);
+        })
+        .catch((err) => {
+            emit({ type: 'error', message: err && err.message ? err.message : String(err) });
+            process.exit(1);
+        });
+}
+
+module.exports = {
+    computeFramePlan,
+    finalOutputArgs,
+    normalizedThreads
+};

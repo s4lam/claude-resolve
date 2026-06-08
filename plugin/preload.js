@@ -148,16 +148,18 @@ contextBridge.exposeInMainWorld('galleryAPI', {
 });
 
 contextBridge.exposeInMainWorld('captionAPI', {
-    import: () => ipcRenderer.invoke('captions:import'),
-    parse: (payload) => ipcRenderer.invoke('captions:parse', payload),
-    generate: (payload) => ipcRenderer.invoke('captions:generate', payload),
-    regroup: (payload) => ipcRenderer.invoke('captions:regroup', payload),
+  import: () => ipcRenderer.invoke('captions:import'),
+  parse: (payload) => ipcRenderer.invoke('captions:parse', payload),
+  generate: (payload) => ipcRenderer.invoke('captions:generate', payload),
+  buildOverlayRender: (payload) => ipcRenderer.invoke('captions:buildOverlayRender', payload),
+  regroup: (payload) => ipcRenderer.invoke('captions:regroup', payload),
     listProjects: () => ipcRenderer.invoke('captions:listProjects'),
     getProject: (id) => ipcRenderer.invoke('captions:getProject', id),
     saveProject: (payload) => ipcRenderer.invoke('captions:saveProject', payload),
     deleteProject: (id) => ipcRenderer.invoke('captions:deleteProject', id),
     detectNativeText: (payload) => ipcRenderer.invoke('captions:detectNativeText', payload),
     importNativeTemplate: () => ipcRenderer.invoke('captions:importNativeTemplate'),
+    selfTestNativeText: (payload) => ipcRenderer.invoke('captions:selfTestNativeText', payload),
     previewNativeText: (payload) => ipcRenderer.invoke('captions:previewNativeText', payload),
     createNativeText: (payload) => ipcRenderer.invoke('captions:createNativeText', payload),
     clearNativePreview: () => ipcRenderer.invoke('captions:clearNativePreview')
@@ -232,6 +234,7 @@ contextBridge.exposeInMainWorld('updatesAPI', {
     download: (opts) => ipcRenderer.invoke('app:downloadUpdate', opts),
     install: () => ipcRenderer.invoke('app:installStagedUpdate'),
     getStatus: () => ipcRenderer.invoke('app:getUpdateStatus'),
+    openSetupRepair: () => ipcRenderer.invoke('setup:openRepairTerminal'),
     onProgress: (callback) => {
         const handler = (_e, data) => callback(data);
         ipcRenderer.on('app:updateProgress', handler);

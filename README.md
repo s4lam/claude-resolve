@@ -63,7 +63,9 @@ Resolve AI uses CLI auth. It does not ask for or store OpenAI or Anthropic API k
 
 Download the ZIP asset from the GitHub Release page, not GitHub's automatic **Source code** ZIP. Source ZIPs do not include the built `plugin/dist` files and will fail installer verification.
 
-The installer preserves existing settings, renders, assets, sessions, templates, and legacy `com.clauderesolve.plugin` compatibility paths.
+The release root intentionally shows one launcher per platform. Internal scripts live in `installer/`; normal users should not run them directly.
+
+The installer preserves existing settings, renders, assets, sessions, templates, and legacy `com.clauderesolve.plugin` compatibility paths. It repairs required render dependencies and attempts to install optional local tools into Resolve AI's app-managed tools folder: Codex CLI, Claude Code CLI, Manim, and Whisper. Provider login still stays manual with `codex login` or `claude login`.
 
 ### Install From Source
 
@@ -76,20 +78,20 @@ Then run the platform installer:
 
 ```bash
 # Windows
-install.bat
+"Install Resolve AI.bat"
 ```
 
 ```bash
 # macOS
-bash install.command
+bash "Install Resolve AI.command"
 ```
 
 If macOS Gatekeeper blocks a downloaded source folder:
 
 ```bash
 xattr -dr com.apple.quarantine .
-chmod +x "Install Resolve AI.command" install.command install.sh
-bash install.command
+chmod +x "Install Resolve AI.command" installer/install.sh
+bash "Install Resolve AI.command"
 ```
 
 Source installs are mainly for contributors. Normal users should use the release ZIP.
@@ -275,7 +277,7 @@ If a capability is unavailable, Resolve AI shows the fallback instead of failing
 - **Installer says `missing: dist/index.html`**: you probably downloaded GitHub's **Source code** ZIP. Download `ResolveAI-Windows-vX.Y.Z.zip` or `ResolveAI-macOS-vX.Y.Z.zip` from the Release assets.
 - **Installer says `missing: data/builtin-template-packs.json`**: download the latest release ZIP asset, not Source code, then rerun the installer.
 - **macOS says unidentified developer**: right-click `Install Resolve AI.command`, choose **Open**, then confirm.
-- **macOS double-click does not open**: run `bash install.command` from Terminal once. The launcher will repair executable bits for future runs.
+- **macOS double-click does not open**: run `bash "Install Resolve AI.command"` from Terminal once. The launcher will repair executable bits for future runs.
 - **Plugin path is not a directory**: rerun the latest installer. It backs up the bad file/path automatically before copying the plugin.
 - **Permission denied on macOS**: the installer uses `sudo` only for the `/Library/Application Support/Blackmagic Design/...` plugin folder. Rerun the installer from an extracted folder, not directly inside the ZIP preview.
 - **Render fails with FFmpeg errors**: open Settings > Diagnostics and run the render engine check. Source installs can run `npm --prefix plugin run render-deps:check`.
@@ -286,12 +288,13 @@ If a capability is unavailable, Resolve AI shows the fallback instead of failing
 - **Codex or Claude login fails**: run `codex login` or `claude login` in Terminal, then reopen Resolve AI.
 - **Codex shows noisy skill/config warnings**: those are filtered from chat where possible. Fix invalid local Codex skills/config if they block the CLI.
 - **Ograph is empty**: generate an overlay and click **Save to Ograph**, or open Ograph and click **Capture latest result**.
-- **Manim Lab says setup needed**: install Python 3.11+ and Manim Community Edition with `python -m pip install manim`, then click **Retry**.
-- **Motion Diagram / Manim is optional**: use Settings > Setup or Settings > Optional Tools to open a visible Manim install terminal. Resolve AI does not silently install Python packages.
+- **Manim Lab says setup needed**: run the latest release installer again, or open Settings > Setup and click **Install / Repair Everything**. Resolve AI installs Manim and Whisper into its own local tools folder when Python is available.
+- **Motion Diagram / Manim is optional**: failed Manim or Whisper setup does not break normal overlay rendering. The repair action opens visible terminal output so you can see the exact command and error.
+- **Codex says `gpt-5.3-codex` is not supported**: update to the latest release. Resolve AI now passes `--model gpt-5.5` on both fresh and resumed Codex turns so the CLI cannot fall back to the unsupported ChatGPT-auth default. You can also choose `GPT-5.4 Mini` in Settings > Provider.
 - **AI Clip Finder cannot create timelines**: select exactly one Media Pool video clip and import a timestamped transcript. Untimestamped TXT cannot create frame-accurate cuts.
 - **Whisper is not ready**: install Whisper or whisper.cpp, then configure the command/model path in Settings. SRT/VTT import still works without Whisper.
 - **Short subtitles look too wide**: use the Shorts Studio **Caption this** flow rather than a generic caption prompt. It uses 1080x1920 and vertical safe-area rules.
-- **Native Text+ is unavailable**: import or create a Text+ caption template in the Media Pool named `Resolve AI Caption`, and make sure Resolve's `fuscript` binary exists. Transparent overlay captions still work without this.
+- **Native Text+ is unavailable**: import or create a Text+ caption template in the Media Pool named exactly `Resolve AI Caption`, and make sure Resolve's `fuscript` binary exists. Transparent overlay captions still work without this advanced path.
 - **MP4 is not transparent**: use ProRes MOV.
 
 ## Development

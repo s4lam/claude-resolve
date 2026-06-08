@@ -1067,6 +1067,10 @@ body, #root {
     overflow-wrap: anywhere;
 }
 
+.manim-setup-callout .mini-action {
+    justify-self: start;
+}
+
 .manim-health > div {
     display: grid;
     gap: var(--size-3);
@@ -2473,6 +2477,24 @@ body, #root {
     min-width: 0;
     color: var(--fg-3);
     font-size: var(--fs-11);
+    overflow-wrap: anywhere;
+}
+
+.caption-inline-status {
+    min-width: 0;
+    padding: var(--size-8);
+    border: var(--size-1) solid var(--line-soft);
+    border-radius: var(--size-6);
+    background: var(--bg-1);
+    color: var(--fg-2);
+    font: var(--fs-11)/1.45 var(--font-ui);
+    overflow-wrap: anywhere;
+}
+
+.rough-meta-line {
+    min-width: 0;
+    color: var(--fg-3);
+    font: var(--fs-11)/1.45 var(--font-mono);
     overflow-wrap: anywhere;
 }
 
@@ -4283,6 +4305,18 @@ body, #root {
     min-width: 0;
 }
 
+.setup-overview .settings-button-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--size-6);
+}
+
+.settings-button-stack .settings-small-btn {
+    width: 100%;
+    justify-content: center;
+}
+
 .setup-overview strong {
     color: var(--fg-0);
     font: var(--fw-700) var(--fs-13)/1.2 var(--font-sans);
@@ -4379,6 +4413,10 @@ body, #root {
 
     .setup-overview {
         display: grid;
+    }
+
+    .setup-overview .settings-button-stack {
+        align-items: stretch;
     }
 
     .setup-check-side {

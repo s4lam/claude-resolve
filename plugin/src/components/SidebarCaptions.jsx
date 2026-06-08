@@ -45,9 +45,36 @@ function cloneCues(cues) {
     return (cues || []).map(cue => ({ ...cue, words: Array.isArray(cue.words) ? cue.words.map(word => ({ ...word })) : [] }));
 }
 
+function nativeResultSummary(result, fallback) {
+    const info = String(`${result?.stdout || ''}\n${result?.stderr || ''}`)
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(line => /^INFO:/i.test(line))
+        .map(line => line.replace(/^INFO:\s*/i, ''))
+        .slice(-2)
+        .join(' / ');
+    const counts = [
+        result?.cueCount !== undefined ? `UI ${result.cueCount}` : '',
+        result?.ipcCueCount !== undefined ? `IPC ${result.ipcCueCount}` : '',
+        result?.luaReceivedCueCount !== undefined && result.luaReceivedCueCount !== null ? `Lua ${result.luaReceivedCueCount}` : '',
+        result?.created !== undefined && result.created !== null ? `Created ${result.created}` : ''
+    ].filter(Boolean).join(' / ');
+    if (result?.success) {
+        return `${fallback}${counts ? ` - ${counts}` : ''}${info ? ` - ${info}` : ''}`;
+    }
+    return `${result?.error || result?.reason || info || 'Native Text+ unavailable'}${counts ? ` - ${counts}` : ''}`;
+}
+
+function nativeDurationUnsupported(result) {
+    return Boolean(result?.durationUnsupported)
+        || /ignored scripted duration trimming|Native per-cue Text\+ creation is unavailable/i.test(String(result?.error || result || ''));
+}
+
 export default function SidebarCaptions({ config, onConfigChange, onPrompt }) {
     const captionConfig = config?.captions || {};
     const [rawText, setRawText] = useState('');
+    const [sourceFormat, setSourceFormat] = useState('');
+    const [importedRawText, setImportedRawText] = useState('');
     const [cues, setCues] = useState([]);
     const [analysis, setAnalysis] = useState(null);
     const [style, setStyle] = useState(captionConfig.defaultStyle || 'clean');
@@ -61,12 +88,23 @@ export default function SidebarCaptions({ config, onConfigChange, onPrompt }) {
     const [projects, setProjects] = useState([]);
     const [activeProjectId, setActiveProjectId] = useState(captionConfig.activeProjectId || '');
     const [nativeState, setNativeState] = useState(null);
+    const [lastPreparedNativePayload, setLastPreparedNativePayload] = useState(null);
+    const [nativeDiagnostics, setNativeDiagnostics] = useState(null);
+    const [nativeTextUnsupported, setNativeTextUnsupported] = useState(false);
+    const [timelineContext, setTimelineContext] = useState(null);
+    const [overlayBusy, setOverlayBusy] = useState(false);
     const [history, setHistory] = useState([]);
     const [redo, setRedo] = useState([]);
 
     const stats = analysis || summarizeCues(cues);
     const verticalSafe = captionConfig.verticalSafe !== false;
     const dimensions = verticalSafe ? { width: 1080, height: 1920, fps: 30 } : { width: config?.width || 1920, height: config?.height || 1080, fps: config?.fps || 25 };
+    const nativeCueCount = cues.length;
+    const preparedNativeCueCount = lastPreparedNativePayload?.cues?.length || 0;
+    const nativeTextActionDisabled = !nativeState?.ready || (!nativeCueCount && !preparedNativeCueCount);
+    const nativeCueStatus = nativeCueCount
+        ? `Ready: UI ${nativeCueCount} cues${preparedNativeCueCount ? ` / prepared ${preparedNativeCueCount}` : ''}. Cue times are relative to the selected clip.`
+        : 'Not ready: 0 cues. Import SRT/VTT or paste timestamped captions first. Untimestamped transcript text cannot be placed on a timeline.';
 
     const filteredCues = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -77,6 +115,7 @@ export default function SidebarCaptions({ config, onConfigChange, onPrompt }) {
     useEffect(() => {
         refreshProjects();
         refreshNative();
+        refreshTimelineContext();
     }, []);
 
     useEffect(() => {
@@ -90,8 +129,44 @@ export default function SidebarCaptions({ config, onConfigChange, onPrompt }) {
     }
 
     async function refreshNative() {
-        if (!window.captionAPI?.detectNativeText) return;
-        setNativeState(await window.captionAPI.detectNativeText({ templateName: captionConfig.nativeTemplateName }));
+        setStatus('Checking Native Text+ setup');
+        if (!window.captionAPI?.detectNativeText) {
+            setStatus('Native Text+ API is unavailable. Reinstall or reopen Resolve AI after updating.');
+            return;
+        }
+        try {
+            const result = await window.captionAPI.detectNativeText({ templateName: captionConfig.nativeTemplateName });
+            setNativeState(result);
+            setNativeDiagnostics(prev => ({
+                ...(prev || {}),
+                bridgeVersion: result?.bridgeVersion || '',
+                ipcLoaded: Boolean(result?.ipcFile?.exists),
+                luaLoaded: Boolean(result?.luaFile?.exists),
+                restartRequired: Boolean(result?.restartRequired)
+            }));
+            setNativeTextUnsupported(false);
+            setStatus(result?.ready ? 'Native Text+ bridge ready' : (result?.reason || 'Native Text+ unavailable'));
+        } catch (error) {
+            setStatus(error?.message || 'Native Text+ check failed');
+        }
+    }
+
+    async function refreshTimelineContext() {
+        if (!window.timelineAPI?.getContext) return null;
+        try {
+            const context = await window.timelineAPI.getContext();
+            setTimelineContext(context);
+            return context;
+        } catch (_error) {
+            return null;
+        }
+    }
+
+    function timelineBaseFrame(context = timelineContext) {
+        const selected = Array.isArray(context?.selectedClips) ? context.selectedClips[0] : null;
+        if (Number.isFinite(Number(selected?.startFrame))) return Number(selected.startFrame);
+        if (Number.isFinite(Number(context?.playheadFrame))) return Number(context.playheadFrame);
+        return 0;
     }
 
     function commitCues(nextCues, nextAnalysis = null, nextWarnings = []) {
@@ -106,7 +181,13 @@ export default function SidebarCaptions({ config, onConfigChange, onPrompt }) {
         setStatus('Importing');
         const result = await window.captionAPI.import();
         const nextCues = result?.cues || [];
+        const nextText = result?.rawText || result?.text || '';
+        setImportedRawText(nextText);
+        setSourceFormat(result?.format || '');
+        if (nextText) setRawText(nextText);
         commitCues(nextCues, result?.analysis);
+        setLastPreparedNativePayload({ cues: cloneCues(nextCues), rawText: nextText, format: result?.format || '' });
+        setNativeDiagnostics(prev => ({ ...(prev || {}), uiCueCount: nextCues.length, preparedCueCount: nextCues.length }));
         setStatus(nextCues.length ? `${nextCues.length} cues imported` : 'No captions found');
     }
 
@@ -114,10 +195,53 @@ export default function SidebarCaptions({ config, onConfigChange, onPrompt }) {
         const text = rawText.trim();
         if (!text) return;
         setStatus('Parsing');
-        const result = await window.captionAPI.parse({ text });
+        const result = await window.captionAPI.parse({ text, format: sourceFormat });
         const nextCues = result?.cues || [];
+        setImportedRawText(text);
+        setSourceFormat(result?.format || sourceFormat || '');
         commitCues(nextCues, result?.analysis);
+        setLastPreparedNativePayload({ cues: cloneCues(nextCues), rawText: text, format: result?.format || sourceFormat || '' });
+        setNativeDiagnostics(prev => ({ ...(prev || {}), uiCueCount: nextCues.length, preparedCueCount: nextCues.length }));
         setStatus(nextCues.length ? `${nextCues.length} cues parsed` : 'No timestamped cues found');
+    }
+
+    async function prepareCaptionCuesForNative(actionLabel = 'Native Text+') {
+        const existing = cloneCues(cues);
+        if (existing.length) {
+            const prepared = { cues: existing, rawText: importedRawText || rawText, format: sourceFormat };
+            setLastPreparedNativePayload(prepared);
+            setNativeDiagnostics(prev => ({ ...(prev || {}), uiCueCount: existing.length, preparedCueCount: existing.length }));
+            return prepared;
+        }
+        const text = (rawText || importedRawText || '').trim();
+        if (!text) {
+            setStatus(`Import an SRT/VTT file or paste timestamped captions before using ${actionLabel}.`);
+            return { cues: [], rawText: '', format: sourceFormat };
+        }
+        if (!window.captionAPI?.parse) {
+            setStatus('Caption parser is unavailable. Reinstall or reopen Resolve AI after updating.');
+            return { cues: [], rawText: text, format: sourceFormat };
+        }
+        setStatus('Parsing transcript for Native Text+');
+        try {
+            const result = await window.captionAPI.parse({ text, format: sourceFormat });
+            const nextCues = result?.cues || [];
+            if (!nextCues.length) {
+                setStatus('No timestamped cues found. Import SRT/VTT or paste timestamped captions first.');
+                return { cues: [], rawText: text, format: result?.format || sourceFormat };
+            }
+            setImportedRawText(text);
+            setSourceFormat(result?.format || sourceFormat || '');
+            commitCues(nextCues, result?.analysis);
+            const prepared = { cues: cloneCues(nextCues), rawText: text, format: result?.format || sourceFormat };
+            setLastPreparedNativePayload(prepared);
+            setNativeDiagnostics(prev => ({ ...(prev || {}), uiCueCount: nextCues.length, preparedCueCount: nextCues.length }));
+            setStatus(`${nextCues.length} cues parsed`);
+            return prepared;
+        } catch (error) {
+            setStatus(error?.message || 'Caption parsing failed');
+            return { cues: [], rawText: text, format: sourceFormat };
+        }
     }
 
     async function handleRegroup() {
@@ -195,6 +319,8 @@ export default function SidebarCaptions({ config, onConfigChange, onPrompt }) {
             id: activeProjectId || undefined,
             title: rawText.split('\n').find(Boolean)?.slice(0, 60) || 'Caption Project',
             cues,
+            rawText: importedRawText || rawText,
+            format: sourceFormat,
             style,
             outputMode,
             regroupMode,
@@ -212,6 +338,9 @@ export default function SidebarCaptions({ config, onConfigChange, onPrompt }) {
         if (!project) return;
         setActiveProjectId(project.id);
         setCues(project.cues || []);
+        setRawText(project.rawText || '');
+        setImportedRawText(project.rawText || '');
+        setSourceFormat(project.format || '');
         setAnalysis(project.analysis || summarizeCues(project.cues || []));
         setStyle(project.style || style);
         setOutputMode(project.outputMode || outputMode);
@@ -234,27 +363,143 @@ export default function SidebarCaptions({ config, onConfigChange, onPrompt }) {
 
     async function handleGenerateOverlay() {
         if (!cues.length) return;
-        setStatus('Building overlay prompt');
-        const result = await window.captionAPI.generate({ cues, style, ...dimensions });
-        setWarnings(result?.warnings || []);
-        if (result?.prompt) {
-            onPrompt?.(result.prompt);
-            setStatus('Overlay prompt sent');
+        if (!window.captionAPI?.buildOverlayRender || !window.overlayAPI?.renderMov) {
+            setStatus('Caption renderer API is unavailable. Reopen Resolve AI after updating.');
+            return;
+        }
+        setOverlayBusy(true);
+        setStatus('Rendering caption overlay');
+        try {
+            const context = await refreshTimelineContext();
+            const result = await window.captionAPI.buildOverlayRender({ cues, style, ...dimensions, timelineContext: context || {} });
+            setWarnings(result?.warnings || []);
+            if (!result?.success) {
+                setStatus(result?.error || 'Caption overlay build failed');
+                return;
+            }
+            const renderResult = await window.overlayAPI.renderMov({
+                html: result.html,
+                name: 'Caption_Overlay',
+                fps: result.metadata?.fps || dimensions.fps,
+                width: result.metadata?.width || dimensions.width,
+                height: result.metadata?.height || dimensions.height,
+                metadata: result.metadata
+            });
+            setStatus(renderResult?.success
+                ? `Overlay rendered${renderResult.placed ? ' and added to timeline' : ''}`
+                : (renderResult?.error || 'Overlay render failed'));
+            if (renderResult?.warning) setWarnings(prev => [...new Set([...(prev || []), renderResult.warning])]);
+        } catch (error) {
+            setStatus(error?.message || 'Caption overlay render failed');
+        } finally {
+            setOverlayBusy(false);
         }
     }
 
     async function handleNativePreview() {
-        if (!cues.length) return;
+        const prepared = await prepareCaptionCuesForNative('Native Text+ preview');
+        if (!prepared.cues.length) {
+            return;
+        }
+        if (!nativeState?.ready) {
+            setStatus(nativeState?.reason || 'Run Check first. Native Text+ bridge is not ready.');
+            return;
+        }
+        if (!window.captionAPI?.previewNativeText) {
+            setStatus('Native Text+ preview API is unavailable. Reinstall or reopen Resolve AI after updating.');
+            return;
+        }
         setStatus('Creating native preview');
-        const result = await window.captionAPI.previewNativeText({ cues, fps: dimensions.fps, templateName: captionConfig.nativeTemplateName });
-        setStatus(result?.success ? 'Native preview created' : (result?.error || result?.reason || 'Native preview unavailable'));
+        try {
+            const context = await refreshTimelineContext();
+            const timelineFps = Number(context?.fps) || dimensions.fps;
+            const result = await window.captionAPI.previewNativeText({ ...prepared, fps: timelineFps, templateName: captionConfig.nativeTemplateName, recordFrame: timelineBaseFrame(context) });
+            setNativeDiagnostics(prev => ({ ...(prev || {}), uiCueCount: prepared.cues.length, preparedCueCount: prepared.cues.length, ipcCueCount: result?.ipcCueCount, luaReceivedCueCount: result?.luaReceivedCueCount, created: result?.created, debugPath: result?.debugPath, wrapperPath: result?.wrapperPath, bridgeVersion: result?.bridgeVersion || prev?.bridgeVersion, lastResult: result }));
+            if (nativeDurationUnsupported(result)) setWarnings(prev => [...new Set([...(prev || []), 'Resolve reported an old duration-trim failure. Restart Resolve AI and try the template append bridge.'])]);
+            setStatus(nativeResultSummary(result, 'Native preview created'));
+        } catch (error) {
+            setStatus(error?.message || 'Native preview failed');
+        }
     }
 
     async function handleNativeCreate() {
-        if (!cues.length) return;
+        const prepared = await prepareCaptionCuesForNative('Native Text+ captions');
+        if (!prepared.cues.length) {
+            return;
+        }
+        if (!nativeState?.ready) {
+            setStatus(nativeState?.reason || 'Run Check first. Native Text+ bridge is not ready.');
+            return;
+        }
+        if (!window.captionAPI?.createNativeText) {
+            setStatus('Native Text+ create API is unavailable. Reinstall or reopen Resolve AI after updating.');
+            return;
+        }
         setStatus('Creating native Text+ captions');
-        const result = await window.captionAPI.createNativeText({ cues, fps: dimensions.fps, templateName: captionConfig.nativeTemplateName });
-        setStatus(result?.success ? 'Native Text+ captions created' : (result?.error || result?.reason || 'Native Text+ unavailable'));
+        try {
+            const context = await refreshTimelineContext();
+            const timelineFps = Number(context?.fps) || dimensions.fps;
+            const result = await window.captionAPI.createNativeText({ ...prepared, fps: timelineFps, templateName: captionConfig.nativeTemplateName, recordFrame: timelineBaseFrame(context) });
+            setNativeDiagnostics(prev => ({ ...(prev || {}), uiCueCount: prepared.cues.length, preparedCueCount: prepared.cues.length, ipcCueCount: result?.ipcCueCount, luaReceivedCueCount: result?.luaReceivedCueCount, created: result?.created, debugPath: result?.debugPath, wrapperPath: result?.wrapperPath, bridgeVersion: result?.bridgeVersion || prev?.bridgeVersion, lastResult: result }));
+            if (nativeDurationUnsupported(result)) setWarnings(prev => [...new Set([...(prev || []), 'Resolve reported an old duration-trim failure. Restart Resolve AI and try the template append bridge.'])]);
+            setStatus(nativeResultSummary(result, 'Native Text+ captions created'));
+        } catch (error) {
+            setStatus(error?.message || 'Native Text+ creation failed');
+        }
+    }
+
+    async function handleNativeSelfTest() {
+        if (!nativeState?.ready) {
+            setStatus(nativeState?.reason || 'Run Check first. Native Text+ bridge is not ready.');
+            return;
+        }
+        if (!window.captionAPI?.selfTestNativeText) {
+            setStatus('Native Text+ self-test API is unavailable. Reinstall or reopen Resolve AI after updating.');
+            return;
+        }
+        setStatus('Running native caption self-test');
+        try {
+            const context = await refreshTimelineContext();
+            const timelineFps = Number(context?.fps) || dimensions.fps;
+            const result = await window.captionAPI.selfTestNativeText({ fps: timelineFps, templateName: captionConfig.nativeTemplateName, recordFrame: timelineBaseFrame(context) });
+            setNativeDiagnostics(prev => ({ ...(prev || {}), uiCueCount: 2, preparedCueCount: 2, ipcCueCount: result?.ipcCueCount, luaReceivedCueCount: result?.luaReceivedCueCount, created: result?.created, debugPath: result?.debugPath, wrapperPath: result?.wrapperPath, bridgeVersion: result?.bridgeVersion || prev?.bridgeVersion, lastResult: result }));
+            setNativeTextUnsupported(false);
+            setStatus(nativeResultSummary(result, 'Native self-test created'));
+        } catch (error) {
+            setStatus(error?.message || 'Native self-test failed');
+        }
+    }
+
+    async function handleCopyNativeDebug() {
+        const debug = {
+            status,
+            nativeState,
+            nativeDiagnostics,
+            lastPreparedCueCount: lastPreparedNativePayload?.cues?.length || 0
+        };
+        try {
+            await navigator.clipboard.writeText(JSON.stringify(debug, null, 2));
+            setStatus('Native debug copied');
+        } catch (_error) {
+            setStatus('Could not copy native debug');
+        }
+    }
+
+    async function handleNativeTemplateHelp() {
+        setStatus('Checking Native Text+ template setup');
+        if (!window.captionAPI?.importNativeTemplate) {
+            setStatus('Native Text+ template setup is unavailable. Reinstall or reopen Resolve AI after updating.');
+            return;
+        }
+        try {
+            const result = await window.captionAPI.importNativeTemplate();
+            setStatus(result?.message || result?.error || result?.reason || 'Native caption placeholder source ready.');
+            if (result?.templateAssetPath) {
+                setNativeDiagnostics(prev => ({ ...(prev || {}), templateAssetPath: result.templateAssetPath }));
+            }
+        } catch (error) {
+            setStatus(error?.message || 'Native Text+ template setup failed');
+        }
     }
 
     function syncPlayhead(cue) {
@@ -369,13 +614,31 @@ export default function SidebarCaptions({ config, onConfigChange, onPrompt }) {
                 <div className="caption-output-panel">
                     {outputMode === 'overlay' ? (
                         <>
-                            <div className="rough-help">Transparent overlay output uses the AI HTML renderer. Vertical safe zone is {verticalSafe ? 'on' : 'off'}.</div>
-                            <button className="btn-primary compact" type="button" onClick={handleGenerateOverlay} disabled={!cues.length}>Send overlay prompt</button>
+                            <div className="rough-help">Transparent overlay renders the caption span only, then places it at the first cue time relative to the selected clip. Vertical safe zone is {verticalSafe ? 'on' : 'off'}.</div>
+                            <button className="btn-primary compact" type="button" onClick={handleGenerateOverlay} disabled={!cues.length || overlayBusy}>{overlayBusy ? 'Rendering...' : 'Render + Add to Timeline'}</button>
+                            {timelineContext?.selectedClips?.[0] ? (
+                                <div className="rough-meta-line">Placement: selected clip {timelineContext.selectedClips[0].name || 'clip'}.</div>
+                            ) : (
+                                <div className="rough-warning">No selected clip detected. Placement falls back to the current playhead.</div>
+                            )}
                         </>
                     ) : (
                         <>
-                            <div className={nativeState?.ready ? 'rough-transcript-state ready' : 'rough-warning'}>
-                                {nativeState?.ready ? 'Native Text+ ready' : (nativeState?.reason || 'Native Text+ detection pending')}
+                            <div className={nativeTextUnsupported ? 'rough-warning' : (nativeState?.ready ? 'rough-transcript-state ready' : 'rough-warning')}>
+                                {nativeTextUnsupported
+                                    ? 'Native Text+ reported an old duration-trim failure. Restart Resolve AI and run Check.'
+                                    : nativeState?.ready
+                                        ? 'Native bridge ready. Text+ uses a Media Pool template and AppendToTimeline per cue.'
+                                        : (nativeState?.reason || 'Native Text+ detection pending')}
+                            </div>
+                            {nativeTextUnsupported && (
+                                <div className="rough-help">The rebuilt Text+ path does not trim inserted titles. It appends a named template as timed clipInfo.</div>
+                            )}
+                            {nativeState?.restartRequired && (
+                                <div className="rough-warning">Restart DaVinci Resolve to load the updated Native Text+ bridge.</div>
+                            )}
+                            <div className="rough-meta-line">
+                                Native bridge: {nativeState?.bridgeVersion || 'unknown'} / IPC {nativeState?.ipcFile?.exists ? 'loaded' : 'missing'} / Lua {nativeState?.luaFile?.exists ? 'loaded' : 'missing'}
                             </div>
                             <div className="caption-controls">
                                 <label>
@@ -383,11 +646,25 @@ export default function SidebarCaptions({ config, onConfigChange, onPrompt }) {
                                     <input value={captionConfig.nativeTemplateName || 'Resolve AI Caption'} readOnly />
                                 </label>
                             </div>
+                            <div className={nativeCueCount ? 'rough-transcript-state ready' : 'rough-warning'}>
+                                {nativeCueStatus}
+                            </div>
                             <div className="rough-button-row">
                                 <button className="mini-action" type="button" onClick={refreshNative}>Check</button>
-                                <button className="mini-action" type="button" onClick={handleNativePreview} disabled={!nativeState?.ready || !cues.length}>Preview</button>
-                                <button className="btn-primary compact" type="button" onClick={handleNativeCreate} disabled={!nativeState?.ready || !cues.length}>Create Text+</button>
+                                <button className="mini-action" type="button" onClick={handleNativeSelfTest}>Run self-test</button>
+                                <button className="mini-action" type="button" onClick={handleNativeTemplateHelp}>Template setup</button>
+                                <button className="mini-action" type="button" onClick={handleNativePreview} disabled={nativeTextActionDisabled}>Preview</button>
+                                <button className="btn-primary compact" type="button" onClick={handleNativeCreate} disabled={nativeTextActionDisabled}>Create Text+ from cues</button>
                             </div>
+                            {nativeDiagnostics && (
+                                <div className="rough-meta-line">
+                                    UI {nativeDiagnostics.uiCueCount ?? nativeCueCount} / IPC {nativeDiagnostics.ipcCueCount ?? '-'} / Lua {nativeDiagnostics.luaReceivedCueCount ?? '-'} / Created {nativeDiagnostics.created ?? '-'}
+                                </div>
+                            )}
+                            {nativeDiagnostics?.debugPath && (
+                                <button className="mini-action" type="button" onClick={handleCopyNativeDebug}>Copy Native Debug</button>
+                            )}
+                            {status && <div className="caption-inline-status">{status}</div>}
                         </>
                     )}
                 </div>
