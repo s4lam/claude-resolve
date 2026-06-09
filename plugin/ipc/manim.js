@@ -283,6 +283,12 @@ function shellQuote(value) {
   return `"${String(value || '').replace(/"/g, '\\"')}"`;
 }
 
+function isAppManagedPython(command = '') {
+  const normalizedCommand = path.normalize(String(command || ''));
+  const normalizedBin = path.normalize(APP_PYTHON_BIN || '');
+  return Boolean(normalizedCommand && normalizedBin && normalizedCommand.startsWith(normalizedBin));
+}
+
 function buildManimInstallCommand(health = detectManim()) {
   const pythonCommand = health?.python?.installed ? health.python.command : '';
   if (!pythonCommand) {
@@ -292,9 +298,10 @@ function buildManimInstallCommand(health = detectManim()) {
       command: ''
     };
   }
+  const userFlag = isAppManagedPython(pythonCommand) ? '' : ' --user';
   return {
     success: true,
-    command: `${shellQuote(pythonCommand)} -m pip install --upgrade ${MANIM_INSTALL_PACKAGE} openai-whisper`
+    command: `${shellQuote(pythonCommand)} -m pip install${userFlag} --upgrade ${MANIM_INSTALL_PACKAGE}`
   };
 }
 

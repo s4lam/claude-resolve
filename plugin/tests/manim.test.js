@@ -59,8 +59,8 @@ const installCommand = buildManimInstallCommand({
   python: { installed: true, command: 'python3' }
 });
 assert.strictEqual(installCommand.success, true);
-assert.ok(installCommand.command.includes('-m pip install --upgrade manim'));
-assert.ok(installCommand.command.includes('openai-whisper'));
+assert.ok(installCommand.command.includes('-m pip install --user --upgrade manim'));
+assert.ok(!installCommand.command.includes('openai-whisper'));
 
 const installWithoutPython = buildManimInstallCommand({
   python: { installed: false, command: '' }

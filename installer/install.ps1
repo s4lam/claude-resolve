@@ -2,7 +2,7 @@
 <#
   Resolve AI - Windows installer.
   Launched by "Install Resolve AI.bat" as the CURRENT user (no up-front
-  elevation). Node, app-managed AI CLIs, Playwright, Manim, and Whisper run in
+  elevation). Node, app-managed AI CLIs, Playwright, and optional Manim run in
   the user's profile; only the final plugin copy into ProgramData is elevated.
 #>
 
@@ -546,7 +546,7 @@ foreach ($candidate in @('py', 'python', 'python3')) {
     }
 }
 if (-not $pythonCmd) {
-    Warn 'Python not found. Manim and Whisper are optional; install Python 3.11+ later from Settings > Setup.'
+    Warn 'Python not found. Manim is optional; install Python 3.11+ later from Settings > Setup.'
     Set-DependencyStatus 'optional' 'python' 'not-installed' 'Python 3.11+ not found.'
 } else {
     try {
@@ -558,7 +558,12 @@ if (-not $pythonCmd) {
         Warn "Could not create local Python environment: $($_.Exception.Message)"
     }
     $venvPython = Join-Path $AppPythonScripts 'python.exe'
-    if (-not (Test-Path $venvPython)) { $venvPython = $pythonCmd }
+    if (-not (Test-Path $venvPython)) {
+        Warn 'Skipping optional Manim auto-install because the local Python environment could not be created. Built-in overlays and transcription still work.'
+        Set-DependencyStatus 'optional' 'python' 'installed' $pythonCmd
+        Set-DependencyStatus 'optional' 'manim' 'not-installed' 'Local Python environment unavailable; install Manim manually from Settings if needed.'
+        Set-DependencyStatus 'optional' 'whisper' 'not-installed' 'External Whisper is not installed automatically. Built-in audio transcription remains available.'
+    } else {
     Set-DependencyStatus 'optional' 'python' 'installed' $venvPython
     try {
         & $venvPython -m pip install --upgrade pip *> $null
@@ -584,31 +589,14 @@ if (-not $pythonCmd) {
         Set-DependencyStatus 'optional' 'manim' 'repair-failed' 'python -m pip install manim'
     }
 
-    $whisperReady = $false
-    try {
-        & $venvPython -m whisper --help *> $null
-        $whisperReady = ($LASTEXITCODE -eq 0)
-    } catch {
-        $whisperReady = $false
-    }
-    if (-not $whisperReady) {
-        Warn 'Installing OpenAI Whisper into Resolve AI tools...'
-        & $venvPython -m pip install --upgrade openai-whisper
-        $whisperReady = ($LASTEXITCODE -eq 0)
-    }
-    if ($whisperReady) {
-        Ok 'Whisper ready.'
-        Set-DependencyStatus 'optional' 'whisper' 'installed' $AppPythonVenv
-    } else {
-        Warn 'Whisper install failed. SRT/VTT transcript import still works.'
-        Set-DependencyStatus 'optional' 'whisper' 'repair-failed' 'python -m pip install openai-whisper'
-    }
+    Set-DependencyStatus 'optional' 'whisper' 'not-installed' 'External Whisper is not installed automatically. Built-in audio transcription remains available.'
 
-    if ($manimReady -or $whisperReady) {
+    if ($manimReady) {
         $venvActivate = Join-Path $AppPythonScripts 'Activate.ps1'
         if (Test-Path $venvActivate) {
             Write-Host "       local tools venv: $AppPythonVenv" -ForegroundColor DarkGray
         }
+    }
     }
 }
 

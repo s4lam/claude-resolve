@@ -3,7 +3,7 @@
 set -u
 
 # Resolve our own location, then drop root if launched via sudo: Node/npm,
-# app-managed CLIs, Manim, Whisper, and Playwright live in the user's
+# app-managed CLIs, optional Manim, and Playwright live in the user's
 # environment; only the final copy into /Library needs root.
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ]; then
@@ -372,7 +372,7 @@ elif command -v python >/dev/null 2>&1; then
     python_cmd="$(command -v python)"
 fi
 if [ -z "$python_cmd" ]; then
-    warn 'Python not found. Manim and Whisper are optional; install Python 3.11+ later from Settings > Setup.'
+    warn 'Python not found. Manim is optional; install Python 3.11+ later from Settings > Setup.'
     write_dep_status optional python not-installed 'Python 3.11+ not found.'
 else
     if [ ! -x "$APP_PYTHON_BIN/python" ]; then
@@ -380,14 +380,21 @@ else
         "$python_cmd" -m venv "$APP_PYTHON_VENV" || warn 'Could not create local Python environment.'
     fi
     venv_python="$APP_PYTHON_BIN/python"
-    [ -x "$venv_python" ] || venv_python="$python_cmd"
-    write_dep_status optional python installed "$venv_python"
-    "$venv_python" -m pip install --upgrade pip >/dev/null 2>&1 || true
+    if [ ! -x "$venv_python" ]; then
+        warn 'Skipping optional Manim auto-install because the local Python environment could not be created. Built-in overlays and transcription still work.'
+        write_dep_status optional python installed "$python_cmd"
+        write_dep_status optional manim not-installed 'Local Python environment unavailable; install Manim manually from Settings if needed.'
+        write_dep_status optional whisper not-installed 'External Whisper is not installed automatically. Built-in audio transcription remains available.'
+        venv_python=""
+    else
+        write_dep_status optional python installed "$venv_python"
+        "$venv_python" -m pip install --upgrade pip >/dev/null 2>&1 || true
+    fi
 
-    if "$venv_python" -m manim --version >/dev/null 2>&1; then
+    if [ -n "$venv_python" ] && "$venv_python" -m manim --version >/dev/null 2>&1; then
         ok 'Manim Community Edition ready.'
         write_dep_status optional manim installed "$APP_PYTHON_VENV"
-    else
+    elif [ -n "$venv_python" ]; then
         warn 'Installing Manim Community Edition into Resolve AI tools...'
         if "$venv_python" -m pip install --upgrade manim; then
             ok 'Manim Community Edition ready.'
@@ -397,20 +404,7 @@ else
             write_dep_status optional manim repair-failed 'python -m pip install manim'
         fi
     fi
-
-    if "$venv_python" -m whisper --help >/dev/null 2>&1; then
-        ok 'Whisper ready.'
-        write_dep_status optional whisper installed "$APP_PYTHON_VENV"
-    else
-        warn 'Installing OpenAI Whisper into Resolve AI tools...'
-        if "$venv_python" -m pip install --upgrade openai-whisper; then
-            ok 'Whisper ready.'
-            write_dep_status optional whisper installed "$APP_PYTHON_VENV"
-        else
-            warn 'Whisper install failed. SRT/VTT transcript import still works.'
-            write_dep_status optional whisper repair-failed 'python -m pip install openai-whisper'
-        fi
-    fi
+    write_dep_status optional whisper not-installed 'External Whisper is not installed automatically. Built-in audio transcription remains available.'
 fi
 
 # 8 - Copy plugin into DaVinci Resolve (needs root)

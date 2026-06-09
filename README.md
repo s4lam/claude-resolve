@@ -65,7 +65,7 @@ Download the ZIP asset from the GitHub Release page, not GitHub's automatic **So
 
 The release root intentionally shows one launcher per platform. Internal scripts live in `installer/`; normal users should not run them directly.
 
-The installer preserves existing settings, renders, assets, sessions, templates, and legacy `com.clauderesolve.plugin` compatibility paths. It repairs required render dependencies and attempts to install optional local tools into Resolve AI's app-managed tools folder: Codex CLI, Claude Code CLI, Manim, and Whisper. Provider login still stays manual with `codex login` or `claude login`.
+The installer preserves existing settings, renders, assets, sessions, templates, and legacy `com.clauderesolve.plugin` compatibility paths. It repairs required render dependencies and attempts to install optional local tools into Resolve AI's app-managed tools folder: Codex CLI, Claude Code CLI, and Manim. Provider login still stays manual with `codex login` or `claude login`. External Whisper is never installed automatically; built-in transcription and SRT/VTT import work without it.
 
 ### Install From Source
 
@@ -288,8 +288,8 @@ If a capability is unavailable, Resolve AI shows the fallback instead of failing
 - **Codex or Claude login fails**: run `codex login` or `claude login` in Terminal, then reopen Resolve AI.
 - **Codex shows noisy skill/config warnings**: those are filtered from chat where possible. Fix invalid local Codex skills/config if they block the CLI.
 - **Ograph is empty**: generate an overlay and click **Save to Ograph**, or open Ograph and click **Capture latest result**.
-- **Manim Lab says setup needed**: run the latest release installer again, or open Settings > Setup and click **Install / Repair Everything**. Resolve AI installs Manim and Whisper into its own local tools folder when Python is available.
-- **Motion Diagram / Manim is optional**: failed Manim or Whisper setup does not break normal overlay rendering. The repair action opens visible terminal output so you can see the exact command and error.
+- **Manim Lab says setup needed**: run the latest release installer again, or open Settings > Setup and click **Install / Repair Everything**. Resolve AI installs Manim into its own local tools folder when Python is available.
+- **Motion Diagram / Manim is optional**: failed Manim setup does not break normal overlay rendering. The repair action opens visible terminal output so you can see the exact command and error.
 - **Codex says `gpt-5.3-codex` is not supported**: update to the latest release. Resolve AI now passes `--model gpt-5.5` on both fresh and resumed Codex turns so the CLI cannot fall back to the unsupported ChatGPT-auth default. You can also choose `GPT-5.4 Mini` in Settings > Provider.
 - **AI Clip Finder cannot create timelines**: select exactly one Media Pool video clip and import a timestamped transcript. Untimestamped TXT cannot create frame-accurate cuts.
 - **Whisper is not ready**: install Whisper or whisper.cpp, then configure the command/model path in Settings. SRT/VTT import still works without Whisper.
